@@ -18,9 +18,13 @@ async function init() {
     buildSearchGrid();
     buildDetailGrid();
     
-    // Register Service Worker for PWA
+    // Register Service Worker for PWA (GitHub Pages Safe)
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js');
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js', { scope: './' })
+                .then(reg => console.log('SW registered!', reg))
+                .catch(err => console.log('SW failed!', err));
+        });
     }
 }
 
@@ -42,7 +46,7 @@ function buildSearchGrid() {
     }
 }
 
-// Build the 2x3 Output Matrix (empty initially)
+// Build the 2x3 Output Matrix
 function buildDetailGrid() {
     for (let i = 0; i < 6; i++) {
         const slot = document.createElement('div');
@@ -57,14 +61,12 @@ function filterRecipes() {
     recipeList.innerHTML = '';
     const activeFilters = selectedInputs.filter(val => val !== "");
     
-    if (activeFilters.length === 0) return; // Show nothing if grid is empty
+    if (activeFilters.length === 0) return;
 
     const filtered = appData.recipes.filter(recipe => {
-        // Check if every item in our active matrix is required by the recipe
         return activeFilters.every(item => recipe.materials.includes(item));
     });
 
-    // Sort by level
     filtered.sort((a, b) => a.level - b.level);
 
     filtered.forEach(recipe => {
