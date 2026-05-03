@@ -1,5 +1,6 @@
 let appData = { materials: [], recipes: [] };
 let selectedInputs = ["", "", "", "", "", ""];
+let selectedSkill = "All";
 
 const inputGrid = document.getElementById('input-grid');
 const recipeList = document.getElementById('recipe-list');
@@ -9,12 +10,25 @@ const recipeScreen = document.getElementById('recipe-screen');
 const detailTitle = document.getElementById('detail-title');
 const backBtn = document.getElementById('back-btn');
 const resetBtn = document.getElementById('reset-btn');
+const skillFilter = document.getElementById('skill-filter');
 
 async function init() {
     try {
         const res = await fetch('data.json');
         if (!res.ok) throw new Error("Network response was not ok");
         appData = await res.json();
+        
+        // Populate Skill Filter dynamically from data
+        const uniqueSkills = [...new Set(appData.recipes.map(r => r.skill))].sort();
+        uniqueSkills.forEach(skill => {
+            skillFilter.innerHTML += `<option value="${skill}">${skill}</option>`;
+        });
+
+        skillFilter.addEventListener('change', (e) => {
+            selectedSkill = e.target.value;
+            updateMaterialDropdowns();
+            filterRecipes();
+        });
         
         buildSearchGrid();
         buildDetailGrid();
@@ -24,19 +38,50 @@ async function init() {
     }
 }
 
-function buildSearchGrid() {
+function updateMaterialDropdowns() {
+    let validMaterials = new Set();
+    
+    // If "All", allow everything. If a skill is picked, find only materials used in that skill.
+    if (selectedSkill === "All") {
+        validMaterials = new Set(appData.materials);
+    } else {
+        appData.recipes.forEach(r => {
+            if (r.skill === selectedSkill) {
+                r.materials.forEach(m => validMaterials.add(m));
+            }
+        });
+    }
+    
+    const validArray = Array.from(validMaterials).sort();
     let optionsHTML = `<option value="">Empty</option>`;
-    appData.materials.forEach(mat => { optionsHTML += `<option value="${mat}">${mat}</option>`; });
+    validArray.forEach(mat => { optionsHTML += `<option value="${mat}">${mat}</option>`; });
 
+    // Update all 6 select boxes without resetting valid selections
+    const selects = inputGrid.querySelectorAll('select');
+    selects.forEach((select, i) => {
+        const currentVal = selectedInputs[i];
+        select.innerHTML = optionsHTML;
+        
+        // If they had an item selected that is STILL valid in this skill, keep it
+        if (validArray.includes(currentVal)) {
+            select.value = currentVal;
+        } else {
+            select.value = "";
+            selectedInputs[i] = ""; // wipe invalid selection
+        }
+    });
+}
+
+function buildSearchGrid() {
     for (let i = 0; i < 6; i++) {
         const select = document.createElement('select');
-        select.innerHTML = optionsHTML; 
         select.addEventListener('change', (e) => {
             selectedInputs[i] = e.target.value;
             filterRecipes();
         });
         inputGrid.appendChild(select);
     }
+    updateMaterialDropdowns();
 }
 
 function buildDetailGrid() {
@@ -51,16 +96,24 @@ function buildDetailGrid() {
 function filterRecipes() {
     recipeList.innerHTML = '';
     const activeFilters = selectedInputs.filter(val => val !== "");
-    if (activeFilters.length === 0) return;
+    
+    // If matrix is empty AND skill is "All", show nothing to save performance.
+    if (activeFilters.length === 0 && selectedSkill === "All") return;
 
     const userCounts = {};
     activeFilters.forEach(item => { userCounts[item] = (userCounts[item] || 0) + 1; });
 
     const filtered = appData.recipes.filter(recipe => {
-        const recipeCounts = {};
-        recipe.materials.forEach(item => { recipeCounts[item] = (recipeCounts[item] || 0) + 1; });
-        for (const item in userCounts) {
-            if (!recipeCounts[item] || recipeCounts[item] < userCounts[item]) return false; 
+        // 1. Must match skill filter if one is active
+        if (selectedSkill !== "All" && recipe.skill !== selectedSkill) return false;
+
+        // 2. Must contain all active ingredients in the grid
+        if (activeFilters.length > 0) {
+            const recipeCounts = {};
+            recipe.materials.forEach(item => { recipeCounts[item] = (recipeCounts[item] || 0) + 1; });
+            for (const item in userCounts) {
+                if (!recipeCounts[item] || recipeCounts[item] < userCounts[item]) return false; 
+            }
         }
         return true;
     });
@@ -100,8 +153,10 @@ backBtn.onclick = () => {
 
 resetBtn.onclick = () => {
     selectedInputs = ["", "", "", "", "", ""];
-    inputGrid.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
-    recipeList.innerHTML = '';
+    skillFilter.value = "All";
+    selectedSkill = "All";
+    updateMaterialDropdowns();
+    filterRecipes();
 };
 
 init();
