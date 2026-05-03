@@ -2,6 +2,7 @@ export async function initRecipeViewer() {
     let appData = { materials: [], recipes: [] };
     let selectedInputs = ["", "", "", "", "", ""];
     let selectedSkill = "All";
+    let selectedSubtype = "All";
 
     const inputGrid = document.getElementById('input-grid');
     const recipeList = document.getElementById('recipe-list');
@@ -12,6 +13,7 @@ export async function initRecipeViewer() {
     const backBtn = document.getElementById('back-btn');
     const resetBtn = document.getElementById('reset-btn');
     const skillFilter = document.getElementById('skill-filter');
+    const subtypeFilter = document.getElementById('subtype-filter');
 
     try {
         const res = await fetch('data.json');
@@ -28,10 +30,19 @@ export async function initRecipeViewer() {
 
         skillFilter.addEventListener('change', (e) => {
             selectedSkill = e.target.value;
+            selectedSubtype = "All"; // Reset subtype when skill changes
+            updateSubtypeDropdown();
+            updateMaterialDropdowns();
+            filterRecipes();
+        });
+
+        subtypeFilter.addEventListener('change', (e) => {
+            selectedSubtype = e.target.value;
             updateMaterialDropdowns();
             filterRecipes();
         });
         
+        updateSubtypeDropdown();
         buildSearchGrid();
         buildDetailGrid();
     } catch (error) {
@@ -61,6 +72,7 @@ export async function initRecipeViewer() {
             const typeIdx = headers.indexOf('Type');
             const recipeIdx = headers.indexOf('Recipe');
             const levelIdx = headers.indexOf('Level');
+            const subIdx = headers.indexOf('craftSubClass');
             
             const matIndices = [];
             for (let i = 1; i <= 6; i++) {
@@ -71,14 +83,27 @@ export async function initRecipeViewer() {
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
                 
-                let typeStr = typeIdx !== -1 && row[typeIdx] !== 0 && row[typeIdx] !== undefined ? strings[row[typeIdx]] : "Unknown";
-                let nameStr = recipeIdx !== -1 && row[recipeIdx] !== 0 && row[recipeIdx] !== undefined ? strings[row[recipeIdx]] : "Unknown";
-                
-                // If it evaluates to empty string, handle it
-                if (!typeStr) typeStr = "Unknown";
-                if (!nameStr) nameStr = "Unknown";
+                let typeStr = typeIdx !== -1 && typeIdx < row.length && row[typeIdx] !== 0 && row[typeIdx] !== undefined ? strings[row[typeIdx]] : "Unknown";
+                let nameStr = recipeIdx !== -1 && recipeIdx < row.length && row[recipeIdx] !== 0 && row[recipeIdx] !== undefined ? strings[row[recipeIdx]] : "Unknown";
+                let subtypeStr = subIdx !== -1 && subIdx < row.length && row[subIdx] !== 0 && row[subIdx] !== undefined ? strings[row[subIdx]] : "Unknown";
 
-                let level = levelIdx !== -1 ? row[levelIdx] : 0;
+                if (!typeStr) typeStr = "Unknown";
+                if (!nameStr || nameStr === "Unknown") continue; // Skip placeholders/empties
+                
+                let skill = "";
+                if (sheetName === 'Craft Recipes') {
+                    skill = 'Crafting';
+                } else if (sheetName === 'Forge Recipes') {
+                    skill = 'Forging';
+                } else if (sheetName === 'Cook & Chem Recipes') {
+                    if (typeStr === 'Chemistry' || subtypeStr === 'Medicine') {
+                        skill = 'Chemistry';
+                    } else {
+                        skill = 'Cooking';
+                    }
+                }
+
+                let level = levelIdx !== -1 && levelIdx < row.length ? row[levelIdx] : 0;
                 if (typeof level !== 'number') {
                     level = strings[level] || 0;
                     level = parseInt(level, 10) || 0;
@@ -86,20 +111,23 @@ export async function initRecipeViewer() {
                 
                 const materials = [];
                 matIndices.forEach(idx => {
-                    const matVal = row[idx];
-                    if (matVal !== 0 && matVal !== undefined) {
-                        const matName = strings[matVal];
-                        if (matName) {
-                            materials.push(matName);
-                            materialsSet.add(matName);
+                    if (idx < row.length) {
+                        const matVal = row[idx];
+                        if (matVal !== 0 && matVal !== undefined) {
+                            const matName = strings[matVal];
+                            if (matName) {
+                                materials.push(matName);
+                                materialsSet.add(matName);
+                            }
                         }
                     }
                 });
                 
                 recipes.push({
                     id: i + '_' + sheetId,
-                    skill: sheetName.replace(' Recipes', ''),
+                    skill: skill,
                     type: typeStr,
+                    subtype: subtypeStr,
                     name: nameStr,
                     level: level,
                     materials: materials
@@ -113,18 +141,41 @@ export async function initRecipeViewer() {
         };
     }
 
-    function updateMaterialDropdowns() {
-        let validMaterials = new Set();
+    function updateSubtypeDropdown() {
+        let validSubtypes = new Set();
         
         if (selectedSkill === "All") {
-            validMaterials = new Set(appData.materials);
+            appData.recipes.forEach(r => validSubtypes.add(r.subtype));
         } else {
             appData.recipes.forEach(r => {
                 if (r.skill === selectedSkill) {
-                    r.materials.forEach(m => validMaterials.add(m));
+                    validSubtypes.add(r.subtype);
                 }
             });
         }
+        
+        // Remove Unknown if present
+        validSubtypes.delete("Unknown");
+        
+        const validArray = Array.from(validSubtypes).sort();
+        let optionsHTML = `<option value="All">All Subtypes</option>`;
+        validArray.forEach(sub => { optionsHTML += `<option value="${sub}">${sub}</option>`; });
+        
+        subtypeFilter.innerHTML = optionsHTML;
+        subtypeFilter.value = selectedSubtype;
+    }
+
+    function updateMaterialDropdowns() {
+        let validMaterials = new Set();
+        
+        appData.recipes.forEach(r => {
+            const skillMatch = selectedSkill === "All" || r.skill === selectedSkill;
+            const subtypeMatch = selectedSubtype === "All" || r.subtype === selectedSubtype;
+            
+            if (skillMatch && subtypeMatch) {
+                r.materials.forEach(m => validMaterials.add(m));
+            }
+        });
         
         const validArray = Array.from(validMaterials).sort();
         let optionsHTML = `<option value="">Empty</option>`;
@@ -169,13 +220,14 @@ export async function initRecipeViewer() {
         recipeList.innerHTML = '';
         const activeFilters = selectedInputs.filter(val => val !== "");
         
-        if (activeFilters.length === 0 && selectedSkill === "All") return;
+        if (activeFilters.length === 0 && selectedSkill === "All" && selectedSubtype === "All") return;
 
         const userCounts = {};
         activeFilters.forEach(item => { userCounts[item] = (userCounts[item] || 0) + 1; });
 
         const filtered = appData.recipes.filter(recipe => {
             if (selectedSkill !== "All" && recipe.skill !== selectedSkill) return false;
+            if (selectedSubtype !== "All" && recipe.subtype !== selectedSubtype) return false;
 
             if (activeFilters.length > 0) {
                 const recipeCounts = {};
@@ -193,7 +245,7 @@ export async function initRecipeViewer() {
             const li = document.createElement('li');
             li.className = 'recipe-item';
             li.dataset.id = recipe.id;
-            li.textContent = `${recipe.name} - ${recipe.skill} Lv.${recipe.level}`;
+            li.textContent = `${recipe.name} - ${recipe.subtype !== 'Unknown' ? recipe.subtype : recipe.skill} Lv.${recipe.level}`;
             recipeList.appendChild(li);
         });
     }
@@ -224,6 +276,8 @@ export async function initRecipeViewer() {
         selectedInputs = ["", "", "", "", "", ""];
         skillFilter.value = "All";
         selectedSkill = "All";
+        selectedSubtype = "All";
+        updateSubtypeDropdown();
         updateMaterialDropdowns();
         filterRecipes();
     };
