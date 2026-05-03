@@ -13,11 +13,19 @@
         <div id="search-screen" class="screen active">
             <header>
                 <h2>Recipe Search</h2>
-                <button id="reset-btn">Clear All</button>
+                <button id="reset-btn">Clear</button>
             </header>
+
+            <div class="filter-bar">
+                <select id="skill-filter">
+                    <option value="All">All Skills</option>
+                </select>
+            </div>
+            
             <div class="matrix-container">
                 <div class="grid-2x3" id="input-grid"></div>
             </div>
+
             <div id="results-container">
                 <ul id="recipe-list"></ul>
             </div>
@@ -35,7 +43,6 @@
     </div>
 
     <script>
-        // Inline SW registration for PWABuilder reliability
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 navigator.serviceWorker.register('sw.js', { scope: './' })
