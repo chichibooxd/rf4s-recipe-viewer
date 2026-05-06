@@ -1,8 +1,11 @@
+import { LoadoutBuilder } from './loadout-builder.js';
+
 export async function initRecipeViewer() {
     let appData = { materials: [], recipes: [] };
     let selectedInputs = ["", "", "", "", "", ""];
     let selectedSkill = "All";
     let selectedSubtype = "All";
+    let loadoutBuilder = null;
 
     const inputGrid = document.getElementById('input-grid');
     const recipeList = document.getElementById('recipe-list');
@@ -12,6 +15,7 @@ export async function initRecipeViewer() {
     const detailTitle = document.getElementById('detail-title');
     const backBtn = document.getElementById('back-btn');
     const resetBtn = document.getElementById('reset-btn');
+    const equipBtn = document.getElementById('equip-btn');
     const skillFilter = document.getElementById('skill-filter');
     const subtypeFilter = document.getElementById('subtype-filter');
     const statsContainer = document.getElementById('stats-container');
@@ -22,6 +26,7 @@ export async function initRecipeViewer() {
         const rawData = await res.json();
         
         appData = processData(rawData);
+        loadoutBuilder = new LoadoutBuilder(appData);
 
         // Populate Skill Filter
         const uniqueSkills = [...new Set(appData.recipes.map(r => r.skill))].sort();
@@ -297,6 +302,8 @@ export async function initRecipeViewer() {
         if (recipe) showRecipeDetail(recipe);
     });
 
+    let currentEquipHandler = null;
+
     function showRecipeDetail(recipe) {
         detailTitle.textContent = `${recipe.name} (Lv.${recipe.level})`;
         const slots = detailGrid.children;
@@ -320,6 +327,17 @@ export async function initRecipeViewer() {
                 statsGrid.appendChild(statBox);
             }
             statsContainer.appendChild(statsGrid);
+        }
+
+        if (loadoutBuilder && loadoutBuilder.getSlotForSubtype(recipe.subtype)) {
+            equipBtn.style.display = 'inline-block';
+            if (currentEquipHandler) {
+                equipBtn.removeEventListener('click', currentEquipHandler);
+            }
+            currentEquipHandler = () => loadoutBuilder.equipItem(recipe);
+            equipBtn.addEventListener('click', currentEquipHandler);
+        } else {
+            equipBtn.style.display = 'none';
         }
         
         searchScreen.classList.remove('active');

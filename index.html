@@ -13,7 +13,10 @@
         <div id="search-screen" class="screen active">
             <header>
                 <h2>Recipe Search</h2>
-                <button id="reset-btn">Clear</button>
+                <div>
+                    <button id="reset-btn">Clear</button>
+                    <button id="toggle-loadout-btn">☰</button>
+                </div>
             </header>
 
             <div class="filter-bar">
@@ -38,11 +41,32 @@
             <header>
                 <button id="back-btn">⬅ Back</button>
                 <h2 id="detail-title" style="flex:1; text-align:right;">Recipe Details</h2>
+                <button id="equip-btn" style="display:none; margin-left:10px;">Equip</button>
             </header>
             <div class="matrix-container">
                 <div class="grid-2x3" id="detail-grid"></div>
             </div>
             <div id="stats-container" class="stats-container"></div>
+        </div>
+        
+        <!-- Loadout Sidebar Overlay -->
+        <div id="loadout-overlay" class="loadout-overlay"></div>
+        <div id="loadout-sidebar" class="loadout-sidebar">
+            <div class="loadout-header">
+                <h2>Loadout</h2>
+                <button id="close-loadout-btn">X</button>
+            </div>
+            <div class="loadout-actions">
+                <button id="share-loadout-btn">Copy Code</button>
+                <button id="import-loadout-btn">Import</button>
+            </div>
+            <div id="loadout-slots" class="loadout-slots">
+                <!-- Slots will be injected here by JS -->
+            </div>
+            <div id="loadout-stats" class="loadout-stats">
+                <h3>Total Stats</h3>
+                <div id="loadout-stats-grid" class="stats-grid"></div>
+            </div>
         </div>
     </div>
 
