@@ -26,13 +26,42 @@ export async function initRecipeViewer() {
         const rawData = await res.json();
         
         appData = processData(rawData);
-        loadoutBuilder = new LoadoutBuilder(appData);
+        loadoutBuilder = new LoadoutBuilder(appData, 
+            (slotName) => {
+                // Empty slot clicked: navigate to search, filter by subtype
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                searchScreen.classList.add('active');
+                
+                // Map slot to subtype/skill if possible
+                if (slotName === 'Weapon') {
+                    skillFilter.value = 'Forging';
+                    selectedSkill = 'Forging';
+                } else {
+                    skillFilter.value = 'Crafting';
+                    selectedSkill = 'Crafting';
+                }
+                
+                selectedSubtype = slotName === 'Weapon' ? 'Short Sword' : slotName; // Default for weapons
+                updateSubtypeDropdown();
+                updateMaterialDropdowns();
+                filterRecipes();
+            },
+            (item) => {
+                // Filled slot clicked: show recipe details
+                showRecipeDetail(item);
+            }
+        );
 
         // Populate Skill Filter
         const uniqueSkills = [...new Set(appData.recipes.map(r => r.skill))].sort();
+        const skillFragment = document.createDocumentFragment();
         uniqueSkills.forEach(skill => {
-            skillFilter.innerHTML += `<option value="${skill}">${skill}</option>`;
+            const opt = document.createElement('option');
+            opt.value = skill;
+            opt.textContent = skill;
+            skillFragment.appendChild(opt);
         });
+        skillFilter.appendChild(skillFragment);
 
         skillFilter.addEventListener('change', (e) => {
             selectedSkill = e.target.value;
@@ -203,10 +232,23 @@ export async function initRecipeViewer() {
         validSubtypes.delete("Unknown");
         
         const validArray = Array.from(validSubtypes).sort();
-        let optionsHTML = `<option value="All">All Subtypes</option>`;
-        validArray.forEach(sub => { optionsHTML += `<option value="${sub}">${sub}</option>`; });
         
-        subtypeFilter.innerHTML = optionsHTML;
+        // Securely replace children
+        subtypeFilter.replaceChildren();
+        const allOpt = document.createElement('option');
+        allOpt.value = "All";
+        allOpt.textContent = "All Subtypes";
+        subtypeFilter.appendChild(allOpt);
+        
+        const fragment = document.createDocumentFragment();
+        validArray.forEach(sub => {
+            const opt = document.createElement('option');
+            opt.value = sub;
+            opt.textContent = sub;
+            fragment.appendChild(opt);
+        });
+        
+        subtypeFilter.appendChild(fragment);
         subtypeFilter.value = selectedSubtype;
     }
 
@@ -223,13 +265,26 @@ export async function initRecipeViewer() {
         });
         
         const validArray = Array.from(validMaterials).sort();
-        let optionsHTML = `<option value="">Empty</option>`;
-        validArray.forEach(mat => { optionsHTML += `<option value="${mat}">${mat}</option>`; });
-
+        
         const selects = inputGrid.querySelectorAll('select');
         selects.forEach((select, i) => {
             const currentVal = selectedInputs[i];
-            select.innerHTML = optionsHTML;
+            
+            // Securely replace children
+            select.replaceChildren();
+            const emptyOpt = document.createElement('option');
+            emptyOpt.value = "";
+            emptyOpt.textContent = "Empty";
+            select.appendChild(emptyOpt);
+            
+            const fragment = document.createDocumentFragment();
+            validArray.forEach(mat => {
+                const opt = document.createElement('option');
+                opt.value = mat;
+                opt.textContent = mat;
+                fragment.appendChild(opt);
+            });
+            select.appendChild(fragment);
             
             if (validArray.includes(currentVal)) {
                 select.value = currentVal;
@@ -262,7 +317,7 @@ export async function initRecipeViewer() {
     }
 
     function filterRecipes() {
-        recipeList.innerHTML = '';
+        recipeList.replaceChildren();
         const activeFilters = selectedInputs.filter(val => val !== "");
         
         if (activeFilters.length === 0 && selectedSkill === "All" && selectedSubtype === "All") return;
@@ -286,13 +341,15 @@ export async function initRecipeViewer() {
 
         filtered.sort((a, b) => a.level - b.level);
 
+        const fragment = document.createDocumentFragment();
         filtered.forEach(recipe => {
             const li = document.createElement('li');
             li.className = 'recipe-item';
             li.dataset.id = recipe.id;
             li.textContent = `${recipe.name} - ${recipe.subtype !== 'Unknown' ? recipe.subtype : recipe.skill} Lv.${recipe.level}`;
-            recipeList.appendChild(li);
+            fragment.appendChild(li);
         });
+        recipeList.appendChild(fragment);
     }
 
     recipeList.addEventListener('click', (e) => {
@@ -311,7 +368,7 @@ export async function initRecipeViewer() {
             slots[i].textContent = recipe.materials[i] || 'Empty';
         }
         
-        statsContainer.innerHTML = '';
+        statsContainer.replaceChildren();
         if (recipe.stats && Object.keys(recipe.stats).length > 0) {
             const statsHeading = document.createElement('h3');
             statsHeading.textContent = 'Stats';
@@ -320,12 +377,19 @@ export async function initRecipeViewer() {
             const statsGrid = document.createElement('div');
             statsGrid.className = 'stats-grid';
             
+            const fragment = document.createDocumentFragment();
             for (const [statName, statValue] of Object.entries(recipe.stats)) {
                 const statBox = document.createElement('div');
                 statBox.className = 'stat-box';
-                statBox.innerHTML = `<strong>${statName}:</strong> ${statValue}`;
-                statsGrid.appendChild(statBox);
+                
+                const strongEl = document.createElement('strong');
+                strongEl.textContent = `${statName}:`;
+                
+                statBox.appendChild(strongEl);
+                statBox.appendChild(document.createTextNode(` ${statValue}`));
+                fragment.appendChild(statBox);
             }
+            statsGrid.appendChild(fragment);
             statsContainer.appendChild(statsGrid);
         }
 

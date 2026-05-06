@@ -1,6 +1,8 @@
 export class LoadoutBuilder {
-    constructor(appData) {
+    constructor(appData, onSlotEmptyClick, onSlotFilledClick) {
         this.appData = appData;
+        this.onSlotEmptyClick = onSlotEmptyClick;
+        this.onSlotFilledClick = onSlotFilledClick;
         this.slots = {
             Weapon: null,
             Shield: null,
@@ -19,30 +21,14 @@ export class LoadoutBuilder {
     }
 
     initUI() {
-        this.overlay = document.getElementById('loadout-overlay');
-        this.sidebar = document.getElementById('loadout-sidebar');
         this.slotsContainer = document.getElementById('loadout-slots');
         this.statsGrid = document.getElementById('loadout-stats-grid');
-        
-        document.getElementById('toggle-loadout-btn').addEventListener('click', () => this.toggleSidebar(true));
-        document.getElementById('close-loadout-btn').addEventListener('click', () => this.toggleSidebar(false));
-        this.overlay.addEventListener('click', () => this.toggleSidebar(false));
         
         document.getElementById('share-loadout-btn').addEventListener('click', () => this.exportLoadout());
         document.getElementById('import-loadout-btn').addEventListener('click', () => this.importLoadout());
 
         this.renderSlots();
         this.renderStats();
-    }
-
-    toggleSidebar(show) {
-        if (show) {
-            this.sidebar.classList.add('active');
-            this.overlay.classList.add('active');
-        } else {
-            this.sidebar.classList.remove('active');
-            this.overlay.classList.remove('active');
-        }
     }
 
     getSlotForSubtype(subtype) {
@@ -61,7 +47,9 @@ export class LoadoutBuilder {
             this.slots[slot] = recipe;
             this.renderSlots();
             this.renderStats();
-            this.toggleSidebar(true);
+            // Switch to loadout screen
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('loadout-screen').classList.add('active');
         } else {
             alert("This item cannot be equipped.");
         }
@@ -74,7 +62,8 @@ export class LoadoutBuilder {
     }
 
     renderSlots() {
-        this.slotsContainer.innerHTML = '';
+        this.slotsContainer.replaceChildren();
+        const fragment = document.createDocumentFragment();
         Object.keys(this.slots).forEach(slot => {
             const item = this.slots[slot];
             const slotEl = document.createElement('div');
@@ -101,12 +90,25 @@ export class LoadoutBuilder {
                 emptyEl.textContent = 'Empty';
                 slotEl.appendChild(emptyEl);
             }
-            this.slotsContainer.appendChild(slotEl);
+            
+            slotEl.addEventListener('click', (e) => {
+                // Ignore if clicked the remove button
+                if (e.target.classList.contains('remove-btn')) return;
+                
+                if (item) {
+                    this.onSlotFilledClick(item);
+                } else {
+                    this.onSlotEmptyClick(slot);
+                }
+            });
+
+            fragment.appendChild(slotEl);
         });
+        this.slotsContainer.appendChild(fragment);
     }
 
     renderStats() {
-        this.statsGrid.innerHTML = '';
+        this.statsGrid.replaceChildren();
         const totalStats = {};
 
         Object.values(this.slots).forEach(item => {
@@ -118,16 +120,26 @@ export class LoadoutBuilder {
         });
 
         if (Object.keys(totalStats).length === 0) {
-            this.statsGrid.innerHTML = '<div class="empty-text">No stats available</div>';
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'empty-text';
+            emptyEl.textContent = 'No stats available';
+            this.statsGrid.appendChild(emptyEl);
             return;
         }
 
+        const fragment = document.createDocumentFragment();
         Object.entries(totalStats).forEach(([stat, val]) => {
             const statBox = document.createElement('div');
             statBox.className = 'stat-box';
-            statBox.innerHTML = `<strong>${stat}:</strong> ${val}`;
-            this.statsGrid.appendChild(statBox);
+            
+            const strongEl = document.createElement('strong');
+            strongEl.textContent = `${stat}:`;
+            
+            statBox.appendChild(strongEl);
+            statBox.appendChild(document.createTextNode(` ${val}`));
+            fragment.appendChild(statBox);
         });
+        this.statsGrid.appendChild(fragment);
     }
 
     exportLoadout() {
