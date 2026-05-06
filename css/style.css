@@ -56,3 +56,10 @@ select, .detail-slot {
 #recipe-list { list-style: none; }
 .recipe-item { padding: 15px; border-bottom: 1px solid #eee; background: white; cursor: pointer; font-size: 16px; transition: background 0.2s; }
 .recipe-item:active { background: #f0f8ff; }
+
+/* Stats Container */
+.stats-container { padding: 15px; overflow-y: auto; flex: 1; }
+.stats-container h3 { margin-bottom: 10px; color: #4a90e2; border-bottom: 1px solid #ccc; padding-bottom: 5px;}
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.stat-box { background: #f9f9f9; padding: 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px; }
+.stat-box strong { color: #555; }

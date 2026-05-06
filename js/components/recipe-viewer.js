@@ -14,6 +14,7 @@ export async function initRecipeViewer() {
     const resetBtn = document.getElementById('reset-btn');
     const skillFilter = document.getElementById('skill-filter');
     const subtypeFilter = document.getElementById('subtype-filter');
+    const statsContainer = document.getElementById('stats-container');
 
     try {
         const res = await fetch('data.json');
@@ -59,7 +60,45 @@ export async function initRecipeViewer() {
         
         const recipes = [];
         const materialsSet = new Set();
+        const equipmentStats = {};
         
+        // Parse Equipment List to get stats
+        const eqSheetId = strToId['Equipment List'];
+        if (eqSheetId !== undefined && sheets[eqSheetId]) {
+            const eqRows = sheets[eqSheetId];
+            const eqHeaders = eqRows[0].map(id => strings[id]);
+            const itemIdx = eqHeaders.indexOf('Item');
+            
+            // Core stat columns we care about
+            const statCols = [
+                'ATK', 'MATK', 'DEF', 'MDEF', 'STR', 'INT', 'VIT', 'Diz', 'Crit%', 'Knock%', 'Stun%',
+                'Psn Atk%', 'Seal Atk%', 'Par Atk%', 'Slp Atk%', 'Ftg Atk%', 'Sick Atk%', 'Faint Atk%', 'Drain Atk%',
+                'Fire Res%', 'Water Res%', 'Earth Res%', 'Wind Res%', 'Light Res%', 'Dark Res%', 'Love Res%',
+                'Diz Res%', 'Crt Res%', 'Knock Res%', 'Psn Res%', 'Seal Res%', 'Par Res%', 'Slp Res%', 'Ftg Res%', 'Sick Res%', 'Fnt Res%', 'Drain Res%'
+            ];
+            
+            const statIndices = statCols.map(col => ({ name: col, idx: eqHeaders.indexOf(col) })).filter(c => c.idx !== -1);
+            
+            for (let i = 1; i < eqRows.length; i++) {
+                const row = eqRows[i];
+                if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
+                    const itemName = strings[row[itemIdx]];
+                    const stats = {};
+                    statIndices.forEach(col => {
+                        if (col.idx < row.length) {
+                            const val = row[col.idx];
+                            if (val !== 0 && val !== undefined && val !== null) {
+                                stats[col.name] = val; // Note: For numerical columns, val is already an integer
+                            }
+                        }
+                    });
+                    if (Object.keys(stats).length > 0) {
+                        equipmentStats[itemName] = stats;
+                    }
+                }
+            }
+        }
+
         const targetSheets = ['Craft Recipes', 'Forge Recipes', 'Cook & Chem Recipes'];
         
         targetSheets.forEach(sheetName => {
@@ -130,7 +169,8 @@ export async function initRecipeViewer() {
                     subtype: subtypeStr,
                     name: nameStr,
                     level: level,
-                    materials: materials
+                    materials: materials,
+                    stats: equipmentStats[nameStr] || null
                 });
             }
         });
@@ -263,6 +303,25 @@ export async function initRecipeViewer() {
         for (let i = 0; i < 6; i++) {
             slots[i].textContent = recipe.materials[i] || 'Empty';
         }
+        
+        statsContainer.innerHTML = '';
+        if (recipe.stats && Object.keys(recipe.stats).length > 0) {
+            const statsHeading = document.createElement('h3');
+            statsHeading.textContent = 'Stats';
+            statsContainer.appendChild(statsHeading);
+            
+            const statsGrid = document.createElement('div');
+            statsGrid.className = 'stats-grid';
+            
+            for (const [statName, statValue] of Object.entries(recipe.stats)) {
+                const statBox = document.createElement('div');
+                statBox.className = 'stat-box';
+                statBox.innerHTML = `<strong>${statName}:</strong> ${statValue}`;
+                statsGrid.appendChild(statBox);
+            }
+            statsContainer.appendChild(statsGrid);
+        }
+        
         searchScreen.classList.remove('active');
         recipeScreen.classList.add('active');
     }
