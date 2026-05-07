@@ -52,7 +52,7 @@
    - **Skill Filter:** Sets `selectedSkill`. Changing this updates the options available in the Subtype dropdown and Material inputs.
    - **Subtype Filter:** Sets `selectedSubtype`. Populates its options based on the recipes valid under the currently selected Skill.
    - **Material Grid:** 6 input dropdowns. A recipe must contain *all* selected materials to be shown.
-4. **UI Event Handlers:** Updates the DOM dynamically based on the current active filters, mapping clicks on the resulting recipe list to a details screen that lists all materials, the recipe's base skill and level requirements, and non-zero combat stats.
+4. **UI Event Handlers:** Updates the DOM dynamically based on the current active filters, mapping clicks on the resulting recipe list to a details screen that lists all materials, the recipe's base skill and level requirements, and non-zero combat stats. When viewing details of a custom item, empty slots can be clicked to navigate to the search screen to fill the slot with another inherited item.
 5. **Global Navigation & Loadout Editor:**
    - A global hamburger sidebar handles routing between the two main SPA pages (`#search-screen` and `#loadout-screen`).
    - The Loadout Editor tracks 6 slots (Weapon, Shield, Headgear, Armor, Shoes, Accessory).

@@ -421,6 +421,53 @@ export async function initRecipeViewer() {
             if (currentEquipHandler) {
                 equipBtn.removeEventListener('click', currentEquipHandler);
             }
+            currentEquipHandler = () => loadoutBuilder.equipItem(item);
+            equipBtn.addEventListener('click', currentEquipHandler);
+        } else {
+            equipBtn.style.display = 'none';
+        }
+        
+        searchScreen.classList.remove('active');
+        recipeScreen.classList.add('active');
+    }
+
+    backBtn.onclick = () => {
+        recipeScreen.classList.remove('active');
+        searchScreen.classList.add('active');
+    };
+
+    resetBtn.onclick = () => {
+        activeTargetSlot = null;
+        selectedInputs = ["", "", "", "", "", ""];
+        skillFilter.value = "All";
+        selectedSkill = "All";
+        selectedSubtype = "All";
+        updateSubtypeDropdown();
+        updateMaterialDropdowns();
+        filterRecipes();
+    };
+}
+ypeDropdown();
+        updateMaterialDropdowns();
+        filterRecipes();
+    };
+}
+earchScreen.classList.add('active');
+    };
+
+    resetBtn.onclick = () => {
+        selectedInputs = ["", "", "", "", "", ""];
+        skillFilter.value = "All";
+        selectedSkill = "All";
+        selectedSubtype = "All";
+        updateSubtypeDropdown();
+        updateMaterialDropdowns();
+        filterRecipes();
+    };
+}
+entEquipHandler) {
+                equipBtn.removeEventListener('click', currentEquipHandler);
+            }
             currentEquipHandler = () => loadoutBuilder.equipItem(recipe);
             equipBtn.addEventListener('click', currentEquipHandler);
         } else {
@@ -434,6 +481,25 @@ export async function initRecipeViewer() {
     backBtn.onclick = () => {
         recipeScreen.classList.remove('active');
         searchScreen.classList.add('active');
+    };
+
+    resetBtn.onclick = () => {
+        activeTargetSlot = null;
+        selectedInputs = ["", "", "", "", "", ""];
+        skillFilter.value = "All";
+        selectedSkill = "All";
+        selectedSubtype = "All";
+        updateSubtypeDropdown();
+        updateMaterialDropdowns();
+        filterRecipes();
+    };
+}
+ypeDropdown();
+        updateMaterialDropdowns();
+        filterRecipes();
+    };
+}
+earchScreen.classList.add('active');
     };
 
     resetBtn.onclick = () => {
