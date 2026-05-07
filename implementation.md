@@ -59,7 +59,7 @@
    - Automatically maps weapon subtypes (e.g., Short Sword, Hammer, Tool) to the primary `Weapon` slot.
    - Clicking an empty slot jumps back to the Recipe Viewer to search for that item type. Clicking a filled slot opens its recipe details.
    - Aggregates the combined sum of all active equipment `stats` into a single view.
-   - Encodes/decodes active loadouts into Base64 hashes for easy sharing.
+   - Encodes/decodes active loadouts into Base64 hashes for easy sharing, including serializing complex nested `CustomItem` hierarchies to JSON before Base64 encoding.
 
 ## Service Worker (`sw.js`)
 - Employs a Cache-First strategy with network fallback.

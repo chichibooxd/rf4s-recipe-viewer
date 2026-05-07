@@ -1,3 +1,5 @@
+import { CustomItem } from '../models/custom-item.js';
+
 export class LoadoutBuilder {
     constructor(appData, onSlotEmptyClick, onSlotFilledClick) {
         this.appData = appData;
@@ -41,10 +43,11 @@ export class LoadoutBuilder {
         return null;
     }
 
-    equipItem(recipe) {
-        const slot = this.getSlotForSubtype(recipe.subtype);
+    equipItem(item) {
+        const baseRecipe = item instanceof CustomItem ? item.baseRecipe : item;
+        const slot = this.getSlotForSubtype(baseRecipe.subtype);
         if (slot) {
-            this.slots[slot] = recipe;
+            this.slots[slot] = item instanceof CustomItem ? item : new CustomItem(item);
             this.renderSlots();
             this.renderStats();
             // Switch to loadout screen
@@ -76,7 +79,7 @@ export class LoadoutBuilder {
             if (item) {
                 const nameEl = document.createElement('div');
                 nameEl.className = 'item-name';
-                nameEl.textContent = item.name;
+                nameEl.textContent = item instanceof CustomItem ? item.baseRecipe.name : item.name;
                 slotEl.appendChild(nameEl);
 
                 const removeBtn = document.createElement('button');
@@ -112,10 +115,13 @@ export class LoadoutBuilder {
         const totalStats = {};
 
         Object.values(this.slots).forEach(item => {
-            if (item && item.stats) {
-                Object.entries(item.stats).forEach(([stat, val]) => {
-                    totalStats[stat] = (totalStats[stat] || 0) + val;
-                });
+            if (item) {
+                const stats = item instanceof CustomItem ? item.baseRecipe.stats : item.stats;
+                if (stats) {
+                    Object.entries(stats).forEach(([stat, val]) => {
+                        totalStats[stat] = (totalStats[stat] || 0) + val;
+                    });
+                }
             }
         });
 
@@ -143,8 +149,15 @@ export class LoadoutBuilder {
     }
 
     exportLoadout() {
-        const ids = Object.keys(this.slots).map(slot => this.slots[slot] ? this.slots[slot].id : "");
-        const code = btoa(ids.join('|'));
+        const exportData = {};
+        for (const slot in this.slots) {
+            if (this.slots[slot]) {
+                exportData[slot] = this.slots[slot].toJSON();
+            }
+        }
+        const jsonString = JSON.stringify(exportData);
+        // Use encodeURIComponent to handle unicode safely before btoa
+        const code = btoa(encodeURIComponent(jsonString));
         navigator.clipboard.writeText(code).then(() => {
             alert('Loadout code copied to clipboard!');
         }).catch(err => {
@@ -157,24 +170,22 @@ export class LoadoutBuilder {
         const code = prompt("Enter loadout code:");
         if (!code) return;
         try {
-            const ids = atob(code).split('|');
-            if (ids.length !== 6) throw new Error("Invalid loadout format");
+            const jsonString = decodeURIComponent(atob(code));
+            const importData = JSON.parse(jsonString);
             
-            const slotKeys = Object.keys(this.slots);
-            ids.forEach((id, index) => {
-                if (id) {
-                    const recipe = this.appData.recipes.find(r => r.id === id);
-                    if (recipe) {
-                        this.slots[slotKeys[index]] = recipe;
-                    }
+            for (const slot in this.slots) {
+                if (importData[slot]) {
+                    this.slots[slot] = CustomItem.fromJSON(importData[slot], this.appData);
                 } else {
-                    this.slots[slotKeys[index]] = null;
+                    this.slots[slot] = null;
                 }
-            });
+            }
             this.renderSlots();
             this.renderStats();
-            this.toggleSidebar(true);
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById('loadout-screen').classList.add('active');
         } catch (e) {
+            console.error(e);
             alert('Invalid loadout code.');
         }
     }
