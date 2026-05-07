@@ -8,8 +8,10 @@ The RF4 Recipe Viewer is a lightweight, mobile-first Progressive Web App (PWA) d
    - **Grid Search:** Users can select up to 6 ingredients in a matrix to find recipes that use those materials.
    - **Skill Filter:** Allows narrowing down results by primary skills (`Crafting`, `Forging`, `Chemistry`, `Cooking`).
    - **Subtype Filter:** Dynamically updates based on the selected skill (e.g., `Short Sword`, `Oven`, `Medicine`, `Tool`, `No Tool`) to precisely target specific item categories.
-2. **Recipe Details:** Clickable recipe results that display the full material list and the recipe's level requirement.
-3. **PWA Capabilities:** Fully installable and usable offline through Service Worker caching and a web app manifest.
+2. **Recipe Details & Stats:** Clickable recipe results that display the full material list, the recipe's required skill and level, and all non-zero weapon/armor statistics (ATK, MATK, DEF, Elemental Resistances, etc.).
+3. **Loadout Editor Main Page:** A dedicated screen tracking 6 equipment slots (Weapon, Shield, Headgear, Armor, Shoes, Accessory). It calculates cumulative stat totals for the equipped items and allows users to export/import their loadouts via a Base64 encoded hash code for easy sharing.
+4. **Global Hamburger Navigation:** A slide-out sidebar menu allowing users to switch seamlessly between the two main pages: the **Recipe Viewer** and the **Loadout Editor**.
+5. **PWA Capabilities:** Fully installable and usable offline through Service Worker caching and a web app manifest.
 
 ## Technical Architecture
 - **Frontend:** Vanilla HTML5, CSS3 (using Flexbox and CSS Grid), and modern JavaScript (ES6 Modules). No heavyweight frameworks (React, Angular) to ensure lightning-fast load times.

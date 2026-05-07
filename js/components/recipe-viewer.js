@@ -362,16 +362,39 @@ export async function initRecipeViewer() {
     let currentEquipHandler = null;
 
     function showRecipeDetail(recipe) {
-        detailTitle.textContent = `${recipe.name} (Lv.${recipe.level})`;
+        detailTitle.textContent = recipe.name;
         const slots = detailGrid.children;
         for (let i = 0; i < 6; i++) {
             slots[i].textContent = recipe.materials[i] || 'Empty';
         }
         
         statsContainer.replaceChildren();
+        
+        const baseStatsGrid = document.createElement('div');
+        baseStatsGrid.className = 'stats-grid';
+        baseStatsGrid.style.marginBottom = '15px';
+
+        const skillBox = document.createElement('div');
+        skillBox.className = 'stat-box';
+        const skillStrong = document.createElement('strong');
+        skillStrong.textContent = 'Skill:';
+        skillBox.appendChild(skillStrong);
+        skillBox.appendChild(document.createTextNode(` ${recipe.skill}`));
+        baseStatsGrid.appendChild(skillBox);
+
+        const levelBox = document.createElement('div');
+        levelBox.className = 'stat-box';
+        const levelStrong = document.createElement('strong');
+        levelStrong.textContent = 'Level:';
+        levelBox.appendChild(levelStrong);
+        levelBox.appendChild(document.createTextNode(` ${recipe.level}`));
+        baseStatsGrid.appendChild(levelBox);
+
+        statsContainer.appendChild(baseStatsGrid);
+
         if (recipe.stats && Object.keys(recipe.stats).length > 0) {
             const statsHeading = document.createElement('h3');
-            statsHeading.textContent = 'Stats';
+            statsHeading.textContent = 'Combat Stats';
             statsContainer.appendChild(statsHeading);
             
             const statsGrid = document.createElement('div');
