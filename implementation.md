@@ -15,8 +15,10 @@
 │
 ├── js/
 │   ├── app.js           # Entrypoint module that bootstraps the application
-│   └── components/
-│       └── recipe-viewer.js # Core application logic (decoding, filtering, UI events)
+│   ├── components/
+│   │   └── recipe-viewer.js # Core application logic (decoding, filtering, UI events)
+│   └── models/
+│       └── custom-item.js   # Model for custom crafting inheritance trees
 │
 ├── scripts/
 │   └── convert.py       # Python pipeline script to build `data.json`
