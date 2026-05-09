@@ -114,14 +114,25 @@ export class LoadoutBuilder {
         this.statsGrid.replaceChildren();
         const totalStats = {};
 
-        Object.values(this.slots).forEach(item => {
-            if (item) {
-                const stats = item instanceof CustomItem ? item.baseRecipe.stats : item.stats;
-                if (stats) {
-                    Object.entries(stats).forEach(([stat, val]) => {
+        const calculateStats = (item, isBase = true) => {
+            if (item instanceof CustomItem) {
+                const statsObj = isBase ? item.baseRecipe.baseStats : item.baseRecipe.upgradeStats;
+                if (statsObj) {
+                    Object.entries(statsObj).forEach(([stat, val]) => {
                         totalStats[stat] = (totalStats[stat] || 0) + val;
                     });
                 }
+                item.slots.forEach(slot => {
+                    if (slot instanceof CustomItem) {
+                        calculateStats(slot, false);
+                    }
+                });
+            }
+        };
+
+        Object.values(this.slots).forEach(item => {
+            if (item) {
+                calculateStats(item, true);
             }
         });
 

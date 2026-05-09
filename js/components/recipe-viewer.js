@@ -23,7 +23,7 @@ export async function initRecipeViewer() {
     const statsContainer = document.getElementById('stats-container');
 
     try {
-        const res = await fetch('data.json');
+        const res = await fetch('data/data.json');
         if (!res.ok) throw new Error("Network response was not ok");
         const rawData = await res.json();
         
@@ -97,22 +97,22 @@ export async function initRecipeViewer() {
         const recipes = [];
         const materialsSet = new Set();
         const equipmentStats = {};
+        const upgradeStats = {};
         
         // Parse Equipment List to get stats
         const eqSheetId = strToId['Equipment List'];
+        
+        const statCols = [
+            'ATK', 'MATK', 'DEF', 'MDEF', 'STR', 'INT', 'VIT', 'Diz', 'Crit%', 'Knock%', 'Stun%',
+            'Psn Atk%', 'Seal Atk%', 'Par Atk%', 'Slp Atk%', 'Ftg Atk%', 'Sick Atk%', 'Faint Atk%', 'Drain Atk%',
+            'Fire Res%', 'Water Res%', 'Earth Res%', 'Wind Res%', 'Light Res%', 'Dark Res%', 'Love Res%',
+            'Diz Res%', 'Crt Res%', 'Knock Res%', 'Psn Res%', 'Seal Res%', 'Par Res%', 'Slp Res%', 'Ftg Res%', 'Sick Res%', 'Fnt Res%', 'Drain Res%'
+        ];
+
         if (eqSheetId !== undefined && sheets[eqSheetId]) {
             const eqRows = sheets[eqSheetId];
             const eqHeaders = eqRows[0].map(id => strings[id]);
             const itemIdx = eqHeaders.indexOf('Item');
-            
-            // Core stat columns we care about
-            const statCols = [
-                'ATK', 'MATK', 'DEF', 'MDEF', 'STR', 'INT', 'VIT', 'Diz', 'Crit%', 'Knock%', 'Stun%',
-                'Psn Atk%', 'Seal Atk%', 'Par Atk%', 'Slp Atk%', 'Ftg Atk%', 'Sick Atk%', 'Faint Atk%', 'Drain Atk%',
-                'Fire Res%', 'Water Res%', 'Earth Res%', 'Wind Res%', 'Light Res%', 'Dark Res%', 'Love Res%',
-                'Diz Res%', 'Crt Res%', 'Knock Res%', 'Psn Res%', 'Seal Res%', 'Par Res%', 'Slp Res%', 'Ftg Res%', 'Sick Res%', 'Fnt Res%', 'Drain Res%'
-            ];
-            
             const statIndices = statCols.map(col => ({ name: col, idx: eqHeaders.indexOf(col) })).filter(c => c.idx !== -1);
             
             for (let i = 1; i < eqRows.length; i++) {
@@ -124,12 +124,40 @@ export async function initRecipeViewer() {
                         if (col.idx < row.length) {
                             const val = row[col.idx];
                             if (val !== 0 && val !== undefined && val !== null) {
-                                stats[col.name] = val; // Note: For numerical columns, val is already an integer
+                                stats[col.name] = val;
                             }
                         }
                     });
                     if (Object.keys(stats).length > 0) {
                         equipmentStats[itemName] = stats;
+                    }
+                }
+            }
+        }
+
+        // Parse Upgrade Values to get inherited stats
+        const upSheetId = strToId['Upgrade Values'];
+        if (upSheetId !== undefined && sheets[upSheetId]) {
+            const upRows = sheets[upSheetId];
+            const upHeaders = upRows[0].map(id => strings[id]);
+            const itemIdx = upHeaders.indexOf('Item');
+            const statIndices = statCols.map(col => ({ name: col, idx: upHeaders.indexOf(col) })).filter(c => c.idx !== -1);
+            
+            for (let i = 1; i < upRows.length; i++) {
+                const row = upRows[i];
+                if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
+                    const itemName = strings[row[itemIdx]];
+                    const stats = {};
+                    statIndices.forEach(col => {
+                        if (col.idx < row.length) {
+                            const val = row[col.idx];
+                            if (val !== 0 && val !== undefined && val !== null) {
+                                stats[col.name] = val;
+                            }
+                        }
+                    });
+                    if (Object.keys(stats).length > 0) {
+                        upgradeStats[itemName] = stats;
                     }
                 }
             }
@@ -206,11 +234,86 @@ export async function initRecipeViewer() {
                     name: nameStr,
                     level: level,
                     materials: materials,
-                    stats: equipmentStats[nameStr] || null
+                    baseStats: equipmentStats[nameStr] || null,
+                    upgradeStats: upgradeStats[nameStr] || null
                 });
             }
         });
         
+        const recipeNames = new Set(recipes.map(r => r.name));
+        
+        // Parse Item Values to add all other items
+        const ivSheetId = strToId['Item Values'];
+        if (ivSheetId !== undefined && sheets[ivSheetId]) {
+            const ivRows = sheets[ivSheetId];
+            const ivHeaders = ivRows[0].map(id => strings[id]);
+            const itemIdx = ivHeaders.indexOf('Item');
+            const typeIdx = ivHeaders.indexOf('Item Type');
+            const catIdx = ivHeaders.indexOf('Category');
+
+            for (let i = 1; i < ivRows.length; i++) {
+                const row = ivRows[i];
+                if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
+                    const itemName = strings[row[itemIdx]];
+                    if (!recipeNames.has(itemName)) {
+                        let typeStr = typeIdx !== -1 && row[typeIdx] ? strings[row[typeIdx]] : 'Ingredient';
+                        let catStr = catIdx !== -1 && row[catIdx] ? strings[row[catIdx]] : 'Ingredient';
+                        if (typeof typeStr === 'number') typeStr = strings[typeStr] || 'Ingredient';
+                        if (typeof catStr === 'number') catStr = strings[catStr] || 'Ingredient';
+                        
+                        recipes.push({
+                            id: 'item_' + (strToId[itemName] || itemName.replace(/\s+/g, '_')),
+                            skill: 'Ingredient',
+                            type: typeStr,
+                            subtype: catStr,
+                            name: itemName,
+                            level: 0,
+                            materials: [],
+                            baseStats: equipmentStats[itemName] || null,
+                            upgradeStats: upgradeStats[itemName] || null
+                        });
+                        recipeNames.add(itemName);
+                    }
+                }
+            }
+        }
+
+        // Add any remaining materials that weren't in Item Values
+        materialsSet.forEach(matName => {
+            if (!recipeNames.has(matName)) {
+                recipes.push({
+                    id: 'mat_' + (strToId[matName] || matName.replace(/\s+/g, '_')),
+                    skill: 'Ingredient',
+                    type: 'Ingredient',
+                    subtype: 'Ingredient',
+                    name: matName,
+                    level: 0,
+                    materials: [],
+                    baseStats: equipmentStats[matName] || null,
+                    upgradeStats: upgradeStats[matName] || null
+                });
+                recipeNames.add(matName);
+            }
+        });
+
+        // Add any remaining equipment
+        Object.keys(equipmentStats).forEach(eqName => {
+            if (!recipeNames.has(eqName)) {
+                recipes.push({
+                    id: 'eq_' + (strToId[eqName] || eqName.replace(/\s+/g, '_')),
+                    skill: 'Ingredient',
+                    type: 'Equipment',
+                    subtype: 'Equipment',
+                    name: eqName,
+                    level: 0,
+                    materials: [],
+                    baseStats: equipmentStats[eqName] || null,
+                    upgradeStats: upgradeStats[eqName] || null
+                });
+                recipeNames.add(eqName);
+            }
+        });
+
         return {
             materials: Array.from(materialsSet).sort(),
             recipes: recipes
@@ -432,16 +535,40 @@ export async function initRecipeViewer() {
 
         statsContainer.appendChild(baseStatsGrid);
 
-        if (recipe.stats && Object.keys(recipe.stats).length > 0) {
+        if (recipe.baseStats && Object.keys(recipe.baseStats).length > 0) {
             const statsHeading = document.createElement('h3');
-            statsHeading.textContent = 'Combat Stats';
+            statsHeading.textContent = 'Base Combat Stats';
             statsContainer.appendChild(statsHeading);
             
             const statsGrid = document.createElement('div');
             statsGrid.className = 'stats-grid';
             
             const fragment = document.createDocumentFragment();
-            for (const [statName, statValue] of Object.entries(recipe.stats)) {
+            for (const [statName, statValue] of Object.entries(recipe.baseStats)) {
+                const statBox = document.createElement('div');
+                statBox.className = 'stat-box';
+                
+                const strongEl = document.createElement('strong');
+                strongEl.textContent = `${statName}:`;
+                
+                statBox.appendChild(strongEl);
+                statBox.appendChild(document.createTextNode(` ${statValue}`));
+                fragment.appendChild(statBox);
+            }
+            statsGrid.appendChild(fragment);
+            statsContainer.appendChild(statsGrid);
+        }
+
+        if (recipe.upgradeStats && Object.keys(recipe.upgradeStats).length > 0) {
+            const statsHeading = document.createElement('h3');
+            statsHeading.textContent = 'Inherited Stats';
+            statsContainer.appendChild(statsHeading);
+            
+            const statsGrid = document.createElement('div');
+            statsGrid.className = 'stats-grid';
+            
+            const fragment = document.createDocumentFragment();
+            for (const [statName, statValue] of Object.entries(recipe.upgradeStats)) {
                 const statBox = document.createElement('div');
                 statBox.className = 'stat-box';
                 
