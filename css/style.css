@@ -105,3 +105,18 @@ select, .detail-slot {
 
 .loadout-stats { padding: 15px; background: #e8ecef; border-top: 1px solid #ccc; max-height: 30%; overflow-y: auto; }
 .loadout-stats h3 { margin-bottom: 10px; color: #4a90e2; }
+
+/* Interactive Detail Slots */
+.detail-slot.empty-fillable {
+    cursor: pointer;
+    border: 1px dashed #4a90e2;
+    color: #4a90e2;
+    transition: background 0.2s;
+}
+.detail-slot.empty-fillable:hover {
+    background: #e6f2ff;
+}
+.detail-slot.filled-nested {
+    font-weight: bold;
+    color: #d97706;
+}
