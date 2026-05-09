@@ -1,4 +1,5 @@
 import { LoadoutBuilder } from './loadout-builder.js';
+import { CustomItem } from '../models/custom-item.js';
 
 export async function initRecipeViewer() {
     let appData = { materials: [], recipes: [] };
@@ -6,6 +7,7 @@ export async function initRecipeViewer() {
     let selectedSkill = "All";
     let selectedSubtype = "All";
     let loadoutBuilder = null;
+    let activeTargetSlot = null;
 
     const inputGrid = document.getElementById('input-grid');
     const recipeList = document.getElementById('recipe-list');
@@ -356,16 +358,54 @@ export async function initRecipeViewer() {
         const item = e.target.closest('.recipe-item');
         if (!item) return;
         const recipe = appData.recipes.find(r => r.id === item.dataset.id);
-        if (recipe) showRecipeDetail(recipe);
+        if (!recipe) return;
+
+        if (activeTargetSlot) {
+            // Inheritance: Add item to target slot
+            activeTargetSlot.customItem.setSlot(activeTargetSlot.slotIndex, new CustomItem(recipe));
+            const currentItemToView = activeTargetSlot.customItem;
+            activeTargetSlot = null; // clear state
+            showRecipeDetail(currentItemToView);
+        } else {
+            // Normal view
+            showRecipeDetail(new CustomItem(recipe));
+        }
     });
 
     let currentEquipHandler = null;
 
-    function showRecipeDetail(recipe) {
+    function showRecipeDetail(item) {
+        // item is now always a CustomItem when viewing details
+        const recipe = item.baseRecipe;
         detailTitle.textContent = recipe.name;
+        
         const slots = detailGrid.children;
         for (let i = 0; i < 6; i++) {
-            slots[i].textContent = recipe.materials[i] || 'Empty';
+            const slotVal = item.slots[i];
+            
+            // Clear slot
+            slots[i].textContent = '';
+            slots[i].className = 'detail-slot'; // reset class
+            slots[i].onclick = null; // clear previous handlers
+
+            if (slotVal) {
+                if (slotVal instanceof CustomItem) {
+                    slots[i].textContent = `[Inherit] ${slotVal.baseRecipe.name}`;
+                    slots[i].classList.add('filled-nested');
+                } else {
+                    slots[i].textContent = slotVal;
+                    slots[i].classList.add('filled-base');
+                }
+            } else {
+                slots[i].textContent = 'Empty (+ Add Item)';
+                slots[i].classList.add('empty-fillable');
+                slots[i].onclick = () => {
+                    activeTargetSlot = { customItem: item, slotIndex: i };
+                    // Navigate to search screen
+                    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                    searchScreen.classList.add('active');
+                };
+            }
         }
         
         statsContainer.replaceChildren();
@@ -435,80 +475,3 @@ export async function initRecipeViewer() {
         recipeScreen.classList.remove('active');
         searchScreen.classList.add('active');
     };
-
-    resetBtn.onclick = () => {
-        activeTargetSlot = null;
-        selectedInputs = ["", "", "", "", "", ""];
-        skillFilter.value = "All";
-        selectedSkill = "All";
-        selectedSubtype = "All";
-        updateSubtypeDropdown();
-        updateMaterialDropdowns();
-        filterRecipes();
-    };
-}
-ypeDropdown();
-        updateMaterialDropdowns();
-        filterRecipes();
-    };
-}
-earchScreen.classList.add('active');
-    };
-
-    resetBtn.onclick = () => {
-        selectedInputs = ["", "", "", "", "", ""];
-        skillFilter.value = "All";
-        selectedSkill = "All";
-        selectedSubtype = "All";
-        updateSubtypeDropdown();
-        updateMaterialDropdowns();
-        filterRecipes();
-    };
-}
-entEquipHandler) {
-                equipBtn.removeEventListener('click', currentEquipHandler);
-            }
-            currentEquipHandler = () => loadoutBuilder.equipItem(recipe);
-            equipBtn.addEventListener('click', currentEquipHandler);
-        } else {
-            equipBtn.style.display = 'none';
-        }
-        
-        searchScreen.classList.remove('active');
-        recipeScreen.classList.add('active');
-    }
-
-    backBtn.onclick = () => {
-        recipeScreen.classList.remove('active');
-        searchScreen.classList.add('active');
-    };
-
-    resetBtn.onclick = () => {
-        activeTargetSlot = null;
-        selectedInputs = ["", "", "", "", "", ""];
-        skillFilter.value = "All";
-        selectedSkill = "All";
-        selectedSubtype = "All";
-        updateSubtypeDropdown();
-        updateMaterialDropdowns();
-        filterRecipes();
-    };
-}
-ypeDropdown();
-        updateMaterialDropdowns();
-        filterRecipes();
-    };
-}
-earchScreen.classList.add('active');
-    };
-
-    resetBtn.onclick = () => {
-        selectedInputs = ["", "", "", "", "", ""];
-        skillFilter.value = "All";
-        selectedSkill = "All";
-        selectedSubtype = "All";
-        updateSubtypeDropdown();
-        updateMaterialDropdowns();
-        filterRecipes();
-    };
-}
