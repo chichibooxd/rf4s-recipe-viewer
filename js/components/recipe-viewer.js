@@ -475,3 +475,15 @@ export async function initRecipeViewer() {
         recipeScreen.classList.remove('active');
         searchScreen.classList.add('active');
     };
+
+    resetBtn.onclick = () => {
+        activeTargetSlot = null;
+        selectedInputs = ["", "", "", "", "", ""];
+        skillFilter.value = "All";
+        selectedSkill = "All";
+        selectedSubtype = "All";
+        updateSubtypeDropdown();
+        updateMaterialDropdowns();
+        filterRecipes();
+    };
+}

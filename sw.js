@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rf4-recipes-v9';
+const CACHE_NAME = 'rf4-recipes-v10';
 const ASSETS = [
   './',
   'index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   'js/app.js',
   'js/components/recipe-viewer.js',
   'js/components/loadout-builder.js',
+  'js/models/custom-item.js',
   'data.json',
   'manifest.json',
   'icon-192.png',
