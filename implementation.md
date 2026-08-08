@@ -90,4 +90,4 @@ The `data.json` format is produced by an external conversion script (see `specs.
    (craft RP costs). Stat math follows clepe's Stats Guide: HP yields double every 50 skill
    levels, STR/INT/VIT every 300, RP caps at skill 100; per-skill contributions floor
    individually. Craft cost = flat RP + % of max RP.
-9. **Service Worker:** network-first with cache fallback; cache version `rf4-recipes-v15`.
+9. **Service Worker:** network-first with cache fallback; cache version `rf4-recipes-v16`.

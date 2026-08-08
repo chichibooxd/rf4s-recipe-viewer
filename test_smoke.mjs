@@ -312,7 +312,7 @@ check('api exposes isPickMode', typeof api.isPickMode === 'function');
         const boxes = byId['loadout-stats-grid'].children.map(c => c.textContent).join(' ');
         // base ATK 58/Diz 3, no DEF at all; recipe Iron/Bronze DEF not counted;
         // TDU 19 (Iron2+Iron2+Bronze15) >= 10 grants the +10 ATK tier bonus
-        check('recipe materials do not add stats (no DEF in totals)', !/DEF:/.test(boxes));
+        check('recipe materials do not add stats (DEF 0)', /DEF:\s*0/.test(boxes));
         check('TDU bonus applied (+10 ATK at skill >= 50)', /ATK:\s*68/.test(boxes) && boxes.includes('Total Difficulty bonus'));
         console.log('    Steel Edge totals (no inheritance):', boxes.replace(/\s+/g, ' ').slice(0, 140));
     } else {
@@ -347,6 +347,11 @@ check('api exposes isPickMode', typeof api.isPickMode === 'function');
         const defMatch = boxes.match(/DEF:\s*(\d+)/);
         // Steel Edge has no base DEF; only the inherited Iron contributes DEF 1
         check('loadout total DEF 1 = inherited Iron only', defMatch && parseInt(defMatch[1], 10) === 1);
+        // All stats are now shown (zeros included)
+        check('loadout shows all stats incl. zeros (Fire Res%: 0)', /Fire Res%:\s*0/.test(boxes));
+        check('loadout shows 37 stat boxes', byId['loadout-stats-grid'].children.filter(c => c.className.includes('stat-box')).length === 37);
+        // Loadout persists to localStorage
+        check('loadout persisted to localStorage', !!JSON.parse(globalThis.localStorage.getItem('rf4-loadout') || 'null').Weapon);
         console.log('    Steel Edge totals (with Iron inherited):', boxes.replace(/\s+/g, ' ').slice(0, 140));
     } else {
         check('Steel Edge found for inheritance', false);
@@ -368,6 +373,8 @@ check('api exposes isPickMode', typeof api.isPickMode === 'function');
         check('Salad shows Ingredient Cooking Effects', text.includes('Ingredient Cooking Effects') && text.includes('HP cook:'));
         const emptySlot = byId['detail-grid'].children.find(c => c.classList.contains('empty-fillable'));
         check('food slots are NOT fillable (no inheritance on food)', !emptySlot);
+        // Craft cost from planner max RP appears on production recipes
+        check('recipe detail shows craft RP cost from planner', /Crafting costs \d+ RP/.test(text) && /planner max RP/.test(text));
         console.log('    Salad detail:', text.replace(/\s+/g, ' ').slice(0, 160));
     } else {
         check('Salad found', false);

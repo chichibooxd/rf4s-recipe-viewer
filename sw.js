@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rf4-recipes-v15';
+const CACHE_NAME = 'rf4-recipes-v16';
 const ASSETS = [
   './',
   'index.html',

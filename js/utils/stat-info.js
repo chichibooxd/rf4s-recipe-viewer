@@ -101,18 +101,26 @@ export function statDescription(statName, context = 'general') {
     return DEFAULT_DESC;
 }
 
+// Canonical display order for equipment combat stats (zeros shown on the loadout)
+export const COMBAT_STAT_ORDER = [
+    'ATK', 'MATK', 'DEF', 'MDEF', 'STR', 'INT', 'VIT', 'Diz', 'Crit%', 'Knock%', 'Stun%',
+    'Psn Atk%', 'Seal Atk%', 'Par Atk%', 'Slp Atk%', 'Ftg Atk%', 'Sick Atk%', 'Faint Atk%', 'Drain Atk%',
+    'Fire Res%', 'Water Res%', 'Earth Res%', 'Wind Res%', 'Light Res%', 'Dark Res%', 'Love Res%',
+    'Diz Res%', 'Crt Res%', 'Knock Res%', 'Psn Res%', 'Seal Res%', 'Par Res%', 'Slp Res%', 'Ftg Res%', 'Sick Res%', 'Fnt Res%', 'Drain Res%'
+];
+
 // Attach a click-to-explore tooltip to a stat box.
 // The tooltip is a single shared element so only one can be open at a time.
 let tooltipEl = null;
 
-export function attachStatInfo(box, statName, context = 'general') {
-    box.addEventListener('click', (e) => {
+export function attachStatInfo(statBox, statName, context = 'general') {
+    statBox.addEventListener('click', (e) => {
         e.stopPropagation();
-        showTooltip(box, statName, context);
+        showTooltip(statBox, statName, context);
     });
 }
 
-function showTooltip(anchor, statName, context) {
+function showTooltip(anchorElement, statName, context) {
     if (!tooltipEl) {
         tooltipEl = document.createElement('div');
         tooltipEl.className = 'stat-tooltip';
@@ -122,12 +130,12 @@ function showTooltip(anchor, statName, context) {
         window.addEventListener('routechange', () => hideTooltip());
     }
     tooltipEl.innerHTML = '';
-    const nameEl = document.createElement('strong');
-    nameEl.textContent = statName;
-    tooltipEl.appendChild(nameEl);
+    const statNameLabel = document.createElement('strong');
+    statNameLabel.textContent = statName;
+    tooltipEl.appendChild(statNameLabel);
     tooltipEl.appendChild(document.createTextNode(statDescription(statName, context)));
 
-    const rect = anchor.getBoundingClientRect();
+    const rect = anchorElement.getBoundingClientRect();
     const tooltipWidth = Math.min(280, window.innerWidth - 24);
     let left = rect.left + rect.width / 2 - tooltipWidth / 2;
     left = Math.max(12, Math.min(left, window.innerWidth - tooltipWidth - 12));

@@ -74,4 +74,17 @@ Anketam's Item Rarity Table (GameFAQs FAQ 68669). Cross-checked against the app'
 
 ## Open questions for the user
 - Success-rate and XP formulas: research the decompiled code, ship approximations, or wait?
-- Should the stats editor live in the loadout tab or become a third tab ("Planner")?
+- Should the stats editor live in the loadout tab or become a third tab ("Planner")? *(resolved: dedicated Planner tab)*
+
+## Upcoming changes (requested, in order)
+1. **Recipe RP requirement from planner stats:** the recipe detail screen shows the RP cost
+   to craft that recipe, computed from the planner's current max RP (Forge/Craft 16 + 6.35%,
+   Mix 12 + 4.76%, Cook 5 + 3.81%), including how many crafts the current max RP allows.
+2. **Show all stats on Loadout and Planner:** the loadout totals render the complete combat
+   stat list (including zero values) instead of only non-zero sums; planner already shows
+   the full character stat set.
+3. **Persist values in cache (localStorage):** loadout (equipped items + inheritance) saved
+   on every change and restored on startup, alongside the already-persisted planner state —
+   values survive service-worker cache updates.
+4. **Bug — loadout total stats cut off at the bottom:** the totals grid is clipped by the
+   bottom tab bar; needs bottom padding inside the scrollable stats section.

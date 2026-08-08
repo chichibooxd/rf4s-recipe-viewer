@@ -1,7 +1,7 @@
 import { LoadoutBuilder } from './loadout-builder.js';
 import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus } from '../models/custom-item.js';
 import { attachStatInfo } from '../utils/stat-info.js';
-import { initPlanner } from './planner.js';
+import { initPlanner, getCraftRpCostForSkill, getPlannerMaxRp } from './planner.js';
 
 // Base effects of usable items (dishes, medicine) from the Item Use Values sheet
 const USE_COLS = [
@@ -23,12 +23,12 @@ const COOK_COLS = [
 ];
 
 export async function initRecipeViewer() {
-    let appData = { materials: [], recipes: [] };
-    let selectedInputs = ["", "", "", "", "", ""];
+    let gameData = { materials: [], recipes: [] };
+    let selectedMaterials = ["", "", "", "", "", ""];
     let selectedSkill = "All";
     let selectedSubtype = "All";
     let loadoutBuilder = null;
-    let activeTargetSlot = null;
+    let inheritanceTarget = null;
     let currentDetailItem = null;
     let pendingDetailItem = null;
     let recipeById = new Map();
@@ -56,13 +56,13 @@ export async function initRecipeViewer() {
         if (!res.ok) throw new Error("Network response was not ok");
         const rawData = await res.json();
         
-        appData = processData(rawData);
-        recipeById = new Map(appData.recipes.map(r => [r.id, r]));
-        recipeByName = new Map(appData.recipes.map(r => [r.name, r]));
+        gameData = processData(rawData);
+        recipeById = new Map(gameData.recipes.map(r => [r.id, r]));
+        recipeByName = new Map(gameData.recipes.map(r => [r.name, r]));
 
         initPlanner(rawData);
 
-        loadoutBuilder = new LoadoutBuilder(appData,
+        loadoutBuilder = new LoadoutBuilder(gameData,
             (slotName) => {
                 // Empty slot clicked: navigate to search, filter by subtype
                 setPickMode(null);
@@ -88,13 +88,13 @@ export async function initRecipeViewer() {
         );
 
         // Populate Skill Filter
-        const uniqueSkills = [...new Set(appData.recipes.map(r => r.skill))].sort();
+        const uniqueSkills = [...new Set(gameData.recipes.map(r => r.skill))].sort();
         const skillFragment = document.createDocumentFragment();
         uniqueSkills.forEach(skill => {
-            const opt = document.createElement('option');
-            opt.value = skill;
-            opt.textContent = skill;
-            skillFragment.appendChild(opt);
+            const optionElement = document.createElement('option');
+            optionElement.value = skill;
+            optionElement.textContent = skill;
+            skillFragment.appendChild(optionElement);
         });
         skillFilter.appendChild(skillFragment);
 
@@ -129,7 +129,7 @@ export async function initRecipeViewer() {
 
         resetBtn.onclick = () => {
             setPickMode(null);
-            selectedInputs = ["", "", "", "", "", ""];
+            selectedMaterials = ["", "", "", "", "", ""];
             skillFilter.value = "All";
             selectedSkill = "All";
             selectedSubtype = "All";
@@ -234,7 +234,7 @@ export async function initRecipeViewer() {
     // --- Inheritance pick mode ---
 
     function setPickMode(target) {
-        activeTargetSlot = target;
+        inheritanceTarget = target;
         if (target) {
             pickBannerText.textContent = `Select an item to inherit into material slot ${target.slotIndex + 1}`;
             pickBanner.hidden = false;
@@ -249,48 +249,48 @@ export async function initRecipeViewer() {
         const strings = rawData.strings;
         const sheets = rawData.data;
         
-        const strToId = {};
-        strings.forEach((s, i) => strToId[s] = i);
+        const stringToIndex = {};
+        strings.forEach((s, i) => stringToIndex[s] = i);
         
         const recipes = [];
-        const materialsSet = new Set();
-        const equipmentStats = {};
-        const upgradeStats = {};
-        const useStats = {};
-        const cookStats = {};
-        const difficulty = {};
+        const materialNames = new Set();
+        const baseStatsByItem = {};
+        const upgradeEffectsByItem = {};
+        const useEffectsByItem = {};
+        const cookEffectsByItem = {};
+        const difficultyByItem = {};
         
         // Parse Equipment List to get stats
-        const eqSheetId = strToId['Equipment List'];
+        const equipmentSheetId = stringToIndex['Equipment List'];
         
-        const statCols = [
+        const statColumns = [
             'ATK', 'MATK', 'DEF', 'MDEF', 'STR', 'INT', 'VIT', 'Diz', 'Crit%', 'Knock%', 'Stun%',
             'Psn Atk%', 'Seal Atk%', 'Par Atk%', 'Slp Atk%', 'Ftg Atk%', 'Sick Atk%', 'Faint Atk%', 'Drain Atk%',
             'Fire Res%', 'Water Res%', 'Earth Res%', 'Wind Res%', 'Light Res%', 'Dark Res%', 'Love Res%',
             'Diz Res%', 'Crt Res%', 'Knock Res%', 'Psn Res%', 'Seal Res%', 'Par Res%', 'Slp Res%', 'Ftg Res%', 'Sick Res%', 'Fnt Res%', 'Drain Res%'
         ];
 
-        if (eqSheetId !== undefined && sheets[eqSheetId]) {
-            const eqRows = sheets[eqSheetId];
-            const eqHeaders = eqRows[0].map(id => strings[id]);
-            const itemIdx = eqHeaders.indexOf('Item');
-            const statIndices = statCols.map(col => ({ name: col, idx: eqHeaders.indexOf(col) })).filter(c => c.idx !== -1);
+        if (equipmentSheetId !== undefined && sheets[equipmentSheetId]) {
+            const equipmentRows = sheets[equipmentSheetId];
+            const equipmentHeaders = equipmentRows[0].map(id => strings[id]);
+            const itemColumnIndex = equipmentHeaders.indexOf('Item');
+            const statColumnIndices = statColumns.map(col => ({ name: col, index: equipmentHeaders.indexOf(col) })).filter(c => c.index !== -1);
             
-            for (let i = 1; i < eqRows.length; i++) {
-                const row = eqRows[i];
-                if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
-                    const itemName = strings[row[itemIdx]];
-                    const stats = {};
-                    statIndices.forEach(col => {
-                        if (col.idx < row.length) {
-                            const val = row[col.idx];
-                            if (val !== 0 && val !== undefined && val !== null) {
-                                stats[col.name] = val;
+            for (let i = 1; i < equipmentRows.length; i++) {
+                const row = equipmentRows[i];
+                if (itemColumnIndex !== -1 && itemColumnIndex < row.length && row[itemColumnIndex] !== 0 && row[itemColumnIndex] !== undefined) {
+                    const itemName = strings[row[itemColumnIndex]];
+                    const statValues = {};
+                    statColumnIndices.forEach(column => {
+                        if (column.index < row.length) {
+                            const value = row[column.index];
+                            if (value !== 0 && value !== undefined && value !== null) {
+                                statValues[column.name] = value;
                             }
                         }
                     });
-                    if (Object.keys(stats).length > 0) {
-                        equipmentStats[itemName] = stats;
+                    if (Object.keys(statValues).length > 0) {
+                        baseStatsByItem[itemName] = statValues;
                     }
                 }
             }
@@ -298,108 +298,108 @@ export async function initRecipeViewer() {
 
         // Parse Upgrade Values: per-item upgrade effects (combat stats),
         // hidden cooking effects, and difficulty (used for TDU bonuses)
-        const upSheetId = strToId['Upgrade Values'];
-        if (upSheetId !== undefined && sheets[upSheetId]) {
-            const upRows = sheets[upSheetId];
-            const upHeaders = rows => rows[0].map(id => strings[id]);
-            const headers = upHeaders(upRows);
-            const itemIdx = headers.indexOf('Item');
-            const statIndices = statCols.map(col => ({ name: col, idx: headers.indexOf(col) })).filter(c => c.idx !== -1);
-            const cookIndices = COOK_COLS.map(col => ({ name: col, idx: headers.indexOf(col) })).filter(c => c.idx !== -1);
-            const diffIdx = headers.indexOf('Diff');
+        const upgradeSheetId = stringToIndex['Upgrade Values'];
+        if (upgradeSheetId !== undefined && sheets[upgradeSheetId]) {
+            const upgradeRows = sheets[upgradeSheetId];
+            const readHeaders = rows => rows[0].map(id => strings[id]);
+            const headers = readHeaders(upgradeRows);
+            const itemColumnIndex = headers.indexOf('Item');
+            const statColumnIndices = statColumns.map(col => ({ name: col, index: headers.indexOf(col) })).filter(c => c.index !== -1);
+            const cookColumnIndices = COOK_COLS.map(col => ({ name: col, index: headers.indexOf(col) })).filter(c => c.index !== -1);
+            const difficultyColumnIndex = headers.indexOf('Diff');
             
-            for (let i = 1; i < upRows.length; i++) {
-                const row = upRows[i];
-                if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
-                    const itemName = strings[row[itemIdx]];
-                    const stats = {};
-                    const cook = {};
-                    statIndices.forEach(col => {
-                        if (col.idx < row.length) {
-                            const val = row[col.idx];
-                            if (val !== 0 && val !== undefined && val !== null) {
-                                stats[col.name] = val;
+            for (let i = 1; i < upgradeRows.length; i++) {
+                const row = upgradeRows[i];
+                if (itemColumnIndex !== -1 && itemColumnIndex < row.length && row[itemColumnIndex] !== 0 && row[itemColumnIndex] !== undefined) {
+                    const itemName = strings[row[itemColumnIndex]];
+                    const statValues = {};
+                    const cookValues = {};
+                    statColumnIndices.forEach(column => {
+                        if (column.index < row.length) {
+                            const value = row[column.index];
+                            if (value !== 0 && value !== undefined && value !== null) {
+                                statValues[column.name] = value;
                             }
                         }
                     });
-                    if (Object.keys(stats).length > 0) {
-                        upgradeStats[itemName] = stats;
+                    if (Object.keys(statValues).length > 0) {
+                        upgradeEffectsByItem[itemName] = statValues;
                     }
-                    cookIndices.forEach(col => {
-                        if (col.idx < row.length) {
-                            const val = row[col.idx];
-                            if (val !== 0 && val !== undefined && val !== null) {
-                                cook[col.name] = val;
+                    cookColumnIndices.forEach(column => {
+                        if (column.index < row.length) {
+                            const value = row[column.index];
+                            if (value !== 0 && value !== undefined && value !== null) {
+                                cookValues[column.name] = value;
                             }
                         }
                     });
-                    if (Object.keys(cook).length > 0) {
-                        cookStats[itemName] = cook;
+                    if (Object.keys(cookValues).length > 0) {
+                        cookEffectsByItem[itemName] = cookValues;
                     }
-                    if (diffIdx !== -1 && diffIdx < row.length && typeof row[diffIdx] === 'number') {
-                        difficulty[itemName] = row[diffIdx];
+                    if (difficultyColumnIndex !== -1 && difficultyColumnIndex < row.length && typeof row[difficultyColumnIndex] === 'number') {
+                        difficultyByItem[itemName] = row[difficultyColumnIndex];
                     }
                 }
             }
         }
 
         // Parse Item Use Values: base effects of usable items (dishes, medicine)
-        const ivsSheetId = strToId['Item Use Values'];
-        if (ivsSheetId !== undefined && sheets[ivsSheetId]) {
-            const ivsRows = sheets[ivsSheetId];
-            const ivsHeaders = ivsRows[0].map(id => strings[id]);
-            const itemIdx = ivsHeaders.indexOf('Item');
-            const useIndices = USE_COLS.map(col => ({ name: col, idx: ivsHeaders.indexOf(col) })).filter(c => c.idx !== -1);
+        const useValuesSheetId = stringToIndex['Item Use Values'];
+        if (useValuesSheetId !== undefined && sheets[useValuesSheetId]) {
+            const useValuesRows = sheets[useValuesSheetId];
+            const useValuesHeaders = useValuesRows[0].map(id => strings[id]);
+            const itemColumnIndex = useValuesHeaders.indexOf('Item');
+            const useColumnIndices = USE_COLS.map(col => ({ name: col, index: useValuesHeaders.indexOf(col) })).filter(c => c.index !== -1);
             
-            for (let i = 1; i < ivsRows.length; i++) {
-                const row = ivsRows[i];
-                if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
-                    const itemName = strings[row[itemIdx]];
-                    const stats = {};
-                    useIndices.forEach(col => {
-                        if (col.idx < row.length) {
-                            const val = row[col.idx];
-                            if (val !== 0 && val !== undefined && val !== null) {
-                                stats[col.name] = val;
+            for (let i = 1; i < useValuesRows.length; i++) {
+                const row = useValuesRows[i];
+                if (itemColumnIndex !== -1 && itemColumnIndex < row.length && row[itemColumnIndex] !== 0 && row[itemColumnIndex] !== undefined) {
+                    const itemName = strings[row[itemColumnIndex]];
+                    const statValues = {};
+                    useColumnIndices.forEach(column => {
+                        if (column.index < row.length) {
+                            const value = row[column.index];
+                            if (value !== 0 && value !== undefined && value !== null) {
+                                statValues[column.name] = value;
                             }
                         }
                     });
-                    if (Object.keys(stats).length > 0) {
-                        useStats[itemName] = stats;
+                    if (Object.keys(statValues).length > 0) {
+                        useEffectsByItem[itemName] = statValues;
                     }
                 }
             }
         }
 
-        const targetSheets = ['Craft Recipes', 'Forge Recipes', 'Cook & Chem Recipes'];
+        const recipeSheets = ['Craft Recipes', 'Forge Recipes', 'Cook & Chem Recipes'];
         
-        targetSheets.forEach(sheetName => {
-            const sheetId = strToId[sheetName];
+        recipeSheets.forEach(sheetName => {
+            const sheetId = stringToIndex[sheetName];
             if (sheetId === undefined || !sheets[sheetId]) return;
             
             const rows = sheets[sheetId];
             const headers = rows[0].map(id => strings[id]);
             
-            const typeIdx = headers.indexOf('Type');
-            const recipeIdx = headers.indexOf('Recipe');
-            const levelIdx = headers.indexOf('Level');
-            const subIdx = headers.indexOf('craftSubClass');
+            const typeColumnIndex = headers.indexOf('Type');
+            const recipeColumnIndex = headers.indexOf('Recipe');
+            const levelColumnIndex = headers.indexOf('Level');
+            const subtypeColumnIndex = headers.indexOf('craftSubClass');
             
-            const matIndices = [];
+            const materialColumnIndices = [];
             for (let i = 1; i <= 6; i++) {
-                const idx = headers.indexOf(`Material ${i}`);
-                if (idx !== -1) matIndices.push(idx);
+                const columnIndex = headers.indexOf(`Material ${i}`);
+                if (columnIndex !== -1) materialColumnIndices.push(columnIndex);
             }
             
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
                 
-                let typeStr = typeIdx !== -1 && typeIdx < row.length && row[typeIdx] !== 0 && row[typeIdx] !== undefined ? strings[row[typeIdx]] : "Unknown";
-                let nameStr = recipeIdx !== -1 && recipeIdx < row.length && row[recipeIdx] !== 0 && row[recipeIdx] !== undefined ? strings[row[recipeIdx]] : "Unknown";
-                let subtypeStr = subIdx !== -1 && subIdx < row.length && row[subIdx] !== 0 && row[subIdx] !== undefined ? strings[row[subIdx]] : "Unknown";
+                let typeName = typeColumnIndex !== -1 && typeColumnIndex < row.length && row[typeColumnIndex] !== 0 && row[typeColumnIndex] !== undefined ? strings[row[typeColumnIndex]] : "Unknown";
+                let recipeName = recipeColumnIndex !== -1 && recipeColumnIndex < row.length && row[recipeColumnIndex] !== 0 && row[recipeColumnIndex] !== undefined ? strings[row[recipeColumnIndex]] : "Unknown";
+                let subtypeName = subtypeColumnIndex !== -1 && subtypeColumnIndex < row.length && row[subtypeColumnIndex] !== 0 && row[subtypeColumnIndex] !== undefined ? strings[row[subtypeColumnIndex]] : "Unknown";
 
-                if (!typeStr) typeStr = "Unknown";
-                if (!nameStr || nameStr === "Unknown") continue; // Skip placeholders/empties
+                if (!typeName) typeName = "Unknown";
+                if (!recipeName || recipeName === "Unknown") continue; // Skip placeholders/empties
                 
                 let skill = "";
                 if (sheetName === 'Craft Recipes') {
@@ -407,28 +407,28 @@ export async function initRecipeViewer() {
                 } else if (sheetName === 'Forge Recipes') {
                     skill = 'Forging';
                 } else if (sheetName === 'Cook & Chem Recipes') {
-                    if (typeStr === 'Chemistry' || subtypeStr === 'Medicine') {
+                    if (typeName === 'Chemistry' || subtypeName === 'Medicine') {
                         skill = 'Chemistry';
                     } else {
                         skill = 'Cooking';
                     }
                 }
 
-                let level = levelIdx !== -1 && levelIdx < row.length ? row[levelIdx] : 0;
+                let level = levelColumnIndex !== -1 && levelColumnIndex < row.length ? row[levelColumnIndex] : 0;
                 if (typeof level !== 'number') {
                     level = strings[level] || 0;
                     level = parseInt(level, 10) || 0;
                 }
                 
                 const materials = [];
-                matIndices.forEach(idx => {
-                    if (idx < row.length) {
-                        const matVal = row[idx];
-                        if (matVal !== 0 && matVal !== undefined) {
-                            const matName = strings[matVal];
-                            if (matName) {
-                                materials.push(matName);
-                                materialsSet.add(matName);
+                materialColumnIndices.forEach(columnIndex => {
+                    if (columnIndex < row.length) {
+                        const materialValue = row[columnIndex];
+                        if (materialValue !== 0 && materialValue !== undefined) {
+                            const materialName = strings[materialValue];
+                            if (materialName) {
+                                materials.push(materialName);
+                                materialNames.add(materialName);
                             }
                         }
                     }
@@ -437,306 +437,319 @@ export async function initRecipeViewer() {
                 recipes.push({
                     id: i + '_' + sheetId,
                     skill: skill,
-                    type: typeStr,
-                    subtype: subtypeStr,
-                    name: nameStr,
+                    type: typeName,
+                    subtype: subtypeName,
+                    name: recipeName,
                     level: level,
                     materials: materials,
-                    baseStats: equipmentStats[nameStr] || null,
-                    upgradeStats: upgradeStats[nameStr] || null,
-                    useStats: useStats[nameStr] || null,
-                    cookStats: cookStats[nameStr] || null,
-                    difficulty: difficulty[nameStr] || 0
+                    baseStats: baseStatsByItem[recipeName] || null,
+                    upgradeStats: upgradeEffectsByItem[recipeName] || null,
+                    useStats: useEffectsByItem[recipeName] || null,
+                    cookStats: cookEffectsByItem[recipeName] || null,
+                    difficulty: difficultyByItem[recipeName] || 0
                 });
             }
         });
         
-        const recipeNames = new Set(recipes.map(r => r.name));
+        const knownRecipeNames = new Set(recipes.map(r => r.name));
         
         // Parse Item Values to add all other items
-        const ivSheetId = strToId['Item Values'];
-        if (ivSheetId !== undefined && sheets[ivSheetId]) {
-            const ivRows = sheets[ivSheetId];
-            const ivHeaders = ivRows[0].map(id => strings[id]);
-            const itemIdx = ivHeaders.indexOf('Item');
-            const typeIdx = ivHeaders.indexOf('Item Type');
-            const catIdx = ivHeaders.indexOf('Category');
+        const itemValuesSheetId = stringToIndex['Item Values'];
+        if (itemValuesSheetId !== undefined && sheets[itemValuesSheetId]) {
+            const itemValuesRows = sheets[itemValuesSheetId];
+            const itemValuesHeaders = itemValuesRows[0].map(id => strings[id]);
+            const itemColumnIndex = itemValuesHeaders.indexOf('Item');
+            const typeColumnIndex = itemValuesHeaders.indexOf('Item Type');
+            const categoryColumnIndex = itemValuesHeaders.indexOf('Category');
 
-            for (let i = 1; i < ivRows.length; i++) {
-                const row = ivRows[i];
-                if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
-                    const itemName = strings[row[itemIdx]];
-                    if (!recipeNames.has(itemName)) {
-                        let typeStr = typeIdx !== -1 && row[typeIdx] ? strings[row[typeIdx]] : 'Ingredient';
-                        let catStr = catIdx !== -1 && row[catIdx] ? strings[row[catIdx]] : 'Ingredient';
+            for (let i = 1; i < itemValuesRows.length; i++) {
+                const row = itemValuesRows[i];
+                if (itemColumnIndex !== -1 && itemColumnIndex < row.length && row[itemColumnIndex] !== 0 && row[itemColumnIndex] !== undefined) {
+                    const itemName = strings[row[itemColumnIndex]];
+                    if (!knownRecipeNames.has(itemName)) {
+                        let typeStr = typeColumnIndex !== -1 && row[typeColumnIndex] ? strings[row[typeColumnIndex]] : 'Ingredient';
+                        let catStr = categoryColumnIndex !== -1 && row[categoryColumnIndex] ? strings[row[categoryColumnIndex]] : 'Ingredient';
                         if (typeof typeStr === 'number') typeStr = strings[typeStr] || 'Ingredient';
                         if (typeof catStr === 'number') catStr = strings[catStr] || 'Ingredient';
                         
                         recipes.push({
-                            id: 'item_' + (strToId[itemName] || itemName.replace(/\s+/g, '_')),
+                            id: 'item_' + (stringToIndex[itemName] || itemName.replace(/\s+/g, '_')),
                             skill: 'Ingredient',
                             type: typeStr,
                             subtype: catStr,
                             name: itemName,
                             level: 0,
                             materials: [],
-                            baseStats: equipmentStats[itemName] || null,
-                            upgradeStats: upgradeStats[itemName] || null,
-                            useStats: useStats[itemName] || null,
-                            cookStats: cookStats[itemName] || null,
-                            difficulty: difficulty[itemName] || 0
+                            baseStats: baseStatsByItem[itemName] || null,
+                            upgradeStats: upgradeEffectsByItem[itemName] || null,
+                            useStats: useEffectsByItem[itemName] || null,
+                            cookStats: cookEffectsByItem[itemName] || null,
+                            difficulty: difficultyByItem[itemName] || 0
                         });
-                        recipeNames.add(itemName);
+                        knownRecipeNames.add(itemName);
                     }
                 }
             }
         }
 
         // Add any remaining materials that weren't in Item Values
-        materialsSet.forEach(matName => {
-            if (!recipeNames.has(matName)) {
+        materialNames.forEach(matName => {
+            if (!knownRecipeNames.has(matName)) {
                 recipes.push({
-                    id: 'mat_' + (strToId[matName] || matName.replace(/\s+/g, '_')),
+                    id: 'mat_' + (stringToIndex[matName] || matName.replace(/\s+/g, '_')),
                     skill: 'Ingredient',
                     type: 'Ingredient',
                     subtype: 'Ingredient',
                     name: matName,
                     level: 0,
                     materials: [],
-                    baseStats: equipmentStats[matName] || null,
-                    upgradeStats: upgradeStats[matName] || null,
-                    useStats: useStats[matName] || null,
-                    cookStats: cookStats[matName] || null,
-                    difficulty: difficulty[matName] || 0
+                    baseStats: baseStatsByItem[matName] || null,
+                    upgradeStats: upgradeEffectsByItem[matName] || null,
+                    useStats: useEffectsByItem[matName] || null,
+                    cookStats: cookEffectsByItem[matName] || null,
+                    difficulty: difficultyByItem[matName] || 0
                 });
-                recipeNames.add(matName);
+                knownRecipeNames.add(matName);
             }
         });
 
         // Add any remaining equipment
-        Object.keys(equipmentStats).forEach(eqName => {
-            if (!recipeNames.has(eqName)) {
+        Object.keys(baseStatsByItem).forEach(eqName => {
+            if (!knownRecipeNames.has(eqName)) {
                 recipes.push({
-                    id: 'eq_' + (strToId[eqName] || eqName.replace(/\s+/g, '_')),
+                    id: 'eq_' + (stringToIndex[eqName] || eqName.replace(/\s+/g, '_')),
                     skill: 'Ingredient',
                     type: 'Equipment',
                     subtype: 'Equipment',
                     name: eqName,
                     level: 0,
                     materials: [],
-                    baseStats: equipmentStats[eqName] || null,
-                    upgradeStats: upgradeStats[eqName] || null,
-                    useStats: useStats[eqName] || null,
-                    cookStats: cookStats[eqName] || null,
-                    difficulty: difficulty[eqName] || 0
+                    baseStats: baseStatsByItem[eqName] || null,
+                    upgradeStats: upgradeEffectsByItem[eqName] || null,
+                    useStats: useEffectsByItem[eqName] || null,
+                    cookStats: cookEffectsByItem[eqName] || null,
+                    difficulty: difficultyByItem[eqName] || 0
                 });
-                recipeNames.add(eqName);
+                knownRecipeNames.add(eqName);
             }
         });
 
         return {
-            materials: Array.from(materialsSet).sort(),
+            materials: Array.from(materialNames).sort(),
             recipes: recipes
         };
     }
 
     function updateSubtypeDropdown() {
-        let validSubtypes = new Set();
+        let availableSubtypes = new Set();
         
         if (selectedSkill === "All") {
-            appData.recipes.forEach(r => validSubtypes.add(r.subtype));
+            gameData.recipes.forEach(recipe => availableSubtypes.add(recipe.subtype));
         } else {
-            appData.recipes.forEach(r => {
-                if (r.skill === selectedSkill) {
-                    validSubtypes.add(r.subtype);
+            gameData.recipes.forEach(recipe => {
+                if (recipe.skill === selectedSkill) {
+                    availableSubtypes.add(recipe.subtype);
                 }
             });
         }
         
         // Remove Unknown if present
-        validSubtypes.delete("Unknown");
+        availableSubtypes.delete("Unknown");
         
-        const validArray = Array.from(validSubtypes).sort();
+        const subtypeOptions = Array.from(availableSubtypes).sort();
         
         // Securely replace children
         subtypeFilter.replaceChildren();
-        const allOpt = document.createElement('option');
-        allOpt.value = "All";
-        allOpt.textContent = "All Subtypes";
-        subtypeFilter.appendChild(allOpt);
+        const allOption = document.createElement('option');
+        allOption.value = "All";
+        allOption.textContent = "All Subtypes";
+        subtypeFilter.appendChild(allOption);
         
-        const fragment = document.createDocumentFragment();
-        validArray.forEach(sub => {
-            const opt = document.createElement('option');
-            opt.value = sub;
-            opt.textContent = sub;
-            fragment.appendChild(opt);
+        const optionFragment = document.createDocumentFragment();
+        subtypeOptions.forEach(sub => {
+            const optionElement = document.createElement('option');
+            optionElement.value = sub;
+            optionElement.textContent = sub;
+            optionFragment.appendChild(optionElement);
         });
         
-        subtypeFilter.appendChild(fragment);
+        subtypeFilter.appendChild(optionFragment);
         subtypeFilter.value = selectedSubtype;
     }
 
     function updateMaterialDropdowns() {
-        let validMaterials = new Set();
+        let availableMaterials = new Set();
         
-        appData.recipes.forEach(r => {
-            const skillMatch = selectedSkill === "All" || r.skill === selectedSkill;
-            const subtypeMatch = selectedSubtype === "All" || r.subtype === selectedSubtype;
+        gameData.recipes.forEach(recipe => {
+            const skillMatch = selectedSkill === "All" || recipe.skill === selectedSkill;
+            const subtypeMatch = selectedSubtype === "All" || recipe.subtype === selectedSubtype;
             
             if (skillMatch && subtypeMatch) {
-                r.materials.forEach(m => validMaterials.add(m));
+                recipe.materials.forEach(material => availableMaterials.add(material));
             }
         });
         
-        const validArray = Array.from(validMaterials).sort();
+        const materialOptions = Array.from(availableMaterials).sort();
         
         const selects = inputGrid.querySelectorAll('select');
         selects.forEach((select, i) => {
-            const currentVal = selectedInputs[i];
+            const currentSelection = selectedMaterials[i];
             
             // Securely replace children
             select.replaceChildren();
-            const emptyOpt = document.createElement('option');
-            emptyOpt.value = "";
-            emptyOpt.textContent = "Empty";
-            select.appendChild(emptyOpt);
+            const emptyOption = document.createElement('option');
+            emptyOption.value = "";
+            emptyOption.textContent = "Empty";
+            select.appendChild(emptyOption);
             
-            const fragment = document.createDocumentFragment();
-            validArray.forEach(mat => {
-                const opt = document.createElement('option');
-                opt.value = mat;
-                opt.textContent = mat;
-                fragment.appendChild(opt);
+            const optionFragment = document.createDocumentFragment();
+            materialOptions.forEach(mat => {
+                const optionElement = document.createElement('option');
+                optionElement.value = mat;
+                optionElement.textContent = mat;
+                optionFragment.appendChild(optionElement);
             });
-            select.appendChild(fragment);
+            select.appendChild(optionFragment);
             
-            if (validArray.includes(currentVal)) {
-                select.value = currentVal;
+            if (materialOptions.includes(currentSelection)) {
+                select.value = currentSelection;
             } else {
                 select.value = "";
-                selectedInputs[i] = "";
+                selectedMaterials[i] = "";
             }
         });
     }
 
     function buildSearchGrid() {
         for (let i = 0; i < 6; i++) {
-            const select = document.createElement('select');
-            select.addEventListener('change', (e) => {
-                selectedInputs[i] = e.target.value;
+            const materialSelect = document.createElement('select');
+            materialSelect.addEventListener('change', (e) => {
+                selectedMaterials[i] = e.target.value;
                 filterRecipes();
             });
-            inputGrid.appendChild(select);
+            inputGrid.appendChild(materialSelect);
         }
         updateMaterialDropdowns();
     }
 
     function buildDetailGrid() {
         for (let i = 0; i < 6; i++) {
-            const slot = document.createElement('div');
-            slot.className = 'detail-slot';
-            slot.textContent = 'Empty';
-            detailGrid.appendChild(slot);
+            const slotElement = document.createElement('div');
+            slotElement.className = 'detail-slot';
+            slotElement.textContent = 'Empty';
+            detailGrid.appendChild(slotElement);
         }
     }
 
     function filterRecipes() {
         recipeList.replaceChildren();
-        const activeFilters = selectedInputs.filter(val => val !== "");
+        const selectedMaterialList = selectedMaterials.filter(val => val !== "");
         
-        const noFilters = activeFilters.length === 0 && selectedSkill === "All" && selectedSubtype === "All";
+        const noFilters = selectedMaterialList.length === 0 && selectedSkill === "All" && selectedSubtype === "All";
         if (noFilters) {
             resultsStatus.textContent = 'Pick a skill, subtype, or materials to search';
             resultsStatus.hidden = false;
             return;
         }
 
-        const userCounts = {};
-        activeFilters.forEach(item => { userCounts[item] = (userCounts[item] || 0) + 1; });
+        const selectedMaterialCounts = {};
+        selectedMaterialList.forEach(item => { selectedMaterialCounts[item] = (selectedMaterialCounts[item] || 0) + 1; });
 
-        const filtered = appData.recipes.filter(recipe => {
+        const matchingRecipes = gameData.recipes.filter(recipe => {
             if (selectedSkill !== "All" && recipe.skill !== selectedSkill) return false;
             if (selectedSubtype !== "All" && recipe.subtype !== selectedSubtype) return false;
 
-            if (activeFilters.length > 0) {
-                const recipeCounts = {};
-                recipe.materials.forEach(item => { recipeCounts[item] = (recipeCounts[item] || 0) + 1; });
-                for (const item in userCounts) {
-                    if (!recipeCounts[item] || recipeCounts[item] < userCounts[item]) return false; 
+            if (selectedMaterialList.length > 0) {
+                const recipeMaterialCounts = {};
+                recipe.materials.forEach(item => { recipeMaterialCounts[item] = (recipeMaterialCounts[item] || 0) + 1; });
+                for (const item in selectedMaterialCounts) {
+                    if (!recipeMaterialCounts[item] || recipeMaterialCounts[item] < selectedMaterialCounts[item]) return false; 
                 }
             }
             return true;
         });
 
-        filtered.sort((a, b) => a.level - b.level);
+        matchingRecipes.sort((a, b) => a.level - b.level);
 
-        if (filtered.length === 0) {
+        if (matchingRecipes.length === 0) {
             resultsStatus.textContent = 'No recipes match your filters';
             resultsStatus.hidden = false;
             return;
         }
         resultsStatus.hidden = true;
 
-        const fragment = document.createDocumentFragment();
-        filtered.forEach(recipe => {
-            const li = document.createElement('li');
-            li.className = 'recipe-item';
-            li.dataset.id = recipe.id;
+        const resultFragment = document.createDocumentFragment();
+        matchingRecipes.forEach(recipe => {
+            const resultItem = document.createElement('li');
+            resultItem.className = 'recipe-item';
+            resultItem.dataset.id = recipe.id;
             const typeLabel = recipe.skill === 'Ingredient'
                 ? (recipe.subtype !== 'Unknown' ? recipe.subtype : 'Ingredient')
                 : (recipe.subtype !== 'Unknown' ? `${recipe.subtype} Lv.${recipe.level}` : `${recipe.skill} Lv.${recipe.level}`);
-            li.textContent = `${recipe.name} — ${typeLabel}`;
-            fragment.appendChild(li);
+            resultItem.textContent = `${recipe.name} — ${typeLabel}`;
+            resultFragment.appendChild(resultItem);
         });
-        recipeList.appendChild(fragment);
+        recipeList.appendChild(resultFragment);
     }
 
     recipeList.addEventListener('click', (e) => {
-        const el = e.target.closest('.recipe-item');
-        if (!el) return;
-        const recipe = recipeById.get(el.dataset.id);
+        const clickedElement = e.target.closest('.recipe-item');
+        if (!clickedElement) return;
+        const recipe = recipeById.get(clickedElement.dataset.id);
         if (!recipe) return;
 
-        if (activeTargetSlot) {
+        if (inheritanceTarget) {
             // Inheritance: Add item to target slot
-            activeTargetSlot.customItem.setSlot(activeTargetSlot.slotIndex, new CustomItem(recipe));
-            const currentItemToView = activeTargetSlot.customItem;
+            inheritanceTarget.targetItem.setSlot(inheritanceTarget.slotIndex, new CustomItem(recipe));
+            const itemToView = inheritanceTarget.targetItem;
             setPickMode(null); // clear state
-            openDetail(currentItemToView);
+            openDetail(itemToView);
         } else {
             // Normal view
             openDetail(new CustomItem(recipe));
         }
     });
 
-    let currentEquipHandler = null;
+    let equipButtonClickHandler = null;
+
+    // Crafting cost for this recipe, derived from the planner's max RP
+    function renderCraftCost(recipe) {
+        const rpCost = getCraftRpCostForSkill(recipe.skill);
+        const maxRp = getPlannerMaxRp();
+        if (rpCost === null || maxRp === null) return;
+
+        const grid = document.createElement('div');
+        grid.className = 'stats-grid';
+        const crafts = Math.floor(maxRp / rpCost);
+        appendStatNote(grid, `Crafting costs ${rpCost} RP (planner max RP ${maxRp} → ${crafts} crafts)`);
+        statsContainer.appendChild(grid);
+    }
 
     // Render a stat grid section into the stats container
-    function renderStatSection(heading, entries, extraClass = '', context = 'general') {
-        if (!entries || Object.keys(entries).length === 0) return;
-        const statsHeading = document.createElement('h3');
-        statsHeading.textContent = heading;
-        statsContainer.appendChild(statsHeading);
+    function renderStatSection(heading, statValues, extraClass = '', context = 'general') {
+        if (!statValues || Object.keys(statValues).length === 0) return;
+        const sectionHeading = document.createElement('h3');
+        sectionHeading.textContent = heading;
+        statsContainer.appendChild(sectionHeading);
         
-        const statsGrid = document.createElement('div');
-        statsGrid.className = 'stats-grid';
+        const grid = document.createElement('div');
+        grid.className = 'stats-grid';
         
-        const fragment = document.createDocumentFragment();
-        for (const [statName, statValue] of Object.entries(entries)) {
+        const boxFragment = document.createDocumentFragment();
+        for (const [statName, statValue] of Object.entries(statValues)) {
             const statBox = document.createElement('div');
             statBox.className = 'stat-box' + (extraClass ? ' ' + extraClass : '');
             
-            const strongEl = document.createElement('strong');
-            strongEl.textContent = `${statName}:`;
+            const nameLabel = document.createElement('strong');
+            nameLabel.textContent = `${statName}:`;
             
-            statBox.appendChild(strongEl);
+            statBox.appendChild(nameLabel);
             statBox.appendChild(document.createTextNode(` ${statValue}`));
             attachStatInfo(statBox, statName, context);
-            fragment.appendChild(statBox);
+            boxFragment.appendChild(statBox);
         }
-        statsGrid.appendChild(fragment);
-        statsContainer.appendChild(statsGrid);
+        grid.appendChild(boxFragment);
+        statsContainer.appendChild(grid);
     }
 
     // Render a full-width note inside a stats grid
@@ -757,39 +770,39 @@ export async function initRecipeViewer() {
         const isEquipment = !!loadoutBuilder && !!loadoutBuilder.getSlotForSubtype(recipe.subtype);
         const isWeapon = isEquipment && loadoutBuilder.weaponSubtypes.includes(recipe.subtype);
         
-        const slots = detailGrid.children;
+        const slotElements = detailGrid.children;
         for (let i = 0; i < 6; i++) {
-            const slotVal = item.slots[i];
+            const slotValue = item.slots[i];
             
             // Clear slot
-            slots[i].textContent = '';
-            slots[i].className = 'detail-slot'; // reset class
-            slots[i].onclick = null; // clear previous handlers
+            slotElements[i].textContent = '';
+            slotElements[i].className = 'detail-slot'; // reset class
+            slotElements[i].onclick = null; // clear previous handlers
 
-            if (slotVal) {
-                if (slotVal instanceof CustomItem) {
-                    slots[i].textContent = `[Inherit] ${slotVal.baseRecipe.name}`;
-                    slots[i].classList.add('filled-nested');
+            if (slotValue) {
+                if (slotValue instanceof CustomItem) {
+                    slotElements[i].textContent = `[Inherit] ${slotValue.baseRecipe.name}`;
+                    slotElements[i].classList.add('filled-nested');
                 } else {
-                    slots[i].textContent = slotVal;
-                    slots[i].classList.add('filled-base');
+                    slotElements[i].textContent = slotValue;
+                    slotElements[i].classList.add('filled-base');
                     // Drill down into the material's own recipe if it has one
-                    const matRecipe = recipeByName.get(slotVal);
-                    if (matRecipe) {
-                        slots[i].classList.add('clickable');
-                        slots[i].title = 'View material details';
-                        slots[i].onclick = () => openDetail(new CustomItem(matRecipe));
+                    const materialRecipe = recipeByName.get(slotValue);
+                    if (materialRecipe) {
+                        slotElements[i].classList.add('clickable');
+                        slotElements[i].title = 'View material details';
+                        slotElements[i].onclick = () => openDetail(new CustomItem(materialRecipe));
                     }
                 }
             } else if (isEquipment) {
-                slots[i].textContent = 'Empty (+ Add Item)';
-                slots[i].classList.add('empty-fillable');
-                slots[i].onclick = () => {
-                    setPickMode({ customItem: item, slotIndex: i });
+                slotElements[i].textContent = 'Empty (+ Add Item)';
+                slotElements[i].classList.add('empty-fillable');
+                slotElements[i].onclick = () => {
+                    setPickMode({ targetItem: item, slotIndex: i });
                     navigateTo('#/search', { replace: true });
                 };
             } else {
-                slots[i].textContent = 'Empty';
+                slotElements[i].textContent = 'Empty';
             }
         }
         
@@ -823,13 +836,15 @@ export async function initRecipeViewer() {
             renderFoodStats(recipe);
         }
 
+        renderCraftCost(recipe);
+
         if (loadoutBuilder && isEquipment) {
             equipBtn.style.display = 'inline-block';
-            if (currentEquipHandler) {
-                equipBtn.removeEventListener('click', currentEquipHandler);
+            if (equipButtonClickHandler) {
+                equipBtn.removeEventListener('click', equipButtonClickHandler);
             }
-            currentEquipHandler = () => loadoutBuilder.equipItem(item);
-            equipBtn.addEventListener('click', currentEquipHandler);
+            equipButtonClickHandler = () => loadoutBuilder.equipItem(item);
+            equipBtn.addEventListener('click', equipButtonClickHandler);
         } else {
             equipBtn.style.display = 'none';
         }
@@ -840,10 +855,10 @@ export async function initRecipeViewer() {
     function renderEquipmentStats(item, recipe, isWeapon) {
         renderStatSection('Base Combat Stats', recipe.baseStats, '', 'general');
 
-        const inherited = inheritedStats(item, recipeByName);
-        if (inherited.count > 0) {
-            renderStatSection('Inheritance Effects', inherited.stats, '', 'upgrade');
-            if (inherited.count >= 3) {
+        const inheritedContributions = inheritedStats(item, recipeByName);
+        if (inheritedContributions.count > 0) {
+            renderStatSection('Inheritance Effects', inheritedContributions.stats, '', 'upgrade');
+            if (inheritedContributions.count >= 3) {
                 const noteGrid = document.createElement('div');
                 noteGrid.className = 'stats-grid';
                 appendStatNote(noteGrid, 'In-game only 3 extra items impart their effects — further inherited items are not counted.');
@@ -852,13 +867,13 @@ export async function initRecipeViewer() {
         }
 
         // TDU tier bonus (applies at skill >= 50)
-        const tdu = materialDifficulty(item, recipeByName);
-        const bonus = tduBonus(tdu, isWeapon);
-        const tduEntry = bonus > 0 ? { [isWeapon ? 'ATK' : 'DEF']: bonus } : null;
+        const totalDifficulty = materialDifficulty(item, recipeByName);
+        const tduBonusValue = tduBonus(totalDifficulty, isWeapon);
+        const tduBonusStat = tduBonusValue > 0 ? { [isWeapon ? 'ATK' : 'DEF']: tduBonusValue } : null;
 
-        const totalStats = sumStats(recipe.baseStats, inherited.stats, tduEntry);
-        if (Object.keys(totalStats).length > 0 &&
-            (Object.keys(inherited.stats).length > 0 || bonus > 0)) {
+        const totalStatValues = sumStats(recipe.baseStats, inheritedContributions.stats, tduBonusStat);
+        if (Object.keys(totalStatValues).length > 0 &&
+            (Object.keys(inheritedContributions.stats).length > 0 || tduBonusValue > 0)) {
             const totalHeading = document.createElement('h3');
             totalHeading.textContent = 'Total Stats';
             statsContainer.appendChild(totalHeading);
@@ -867,21 +882,21 @@ export async function initRecipeViewer() {
             totalGrid.className = 'stats-grid';
             
             const totalFragment = document.createDocumentFragment();
-            for (const [statName, statValue] of Object.entries(totalStats)) {
+            for (const [statName, statValue] of Object.entries(totalStatValues)) {
                 const statBox = document.createElement('div');
                 statBox.className = 'stat-box';
                 statBox.classList.add('stat-total');
                 
-                const strongEl = document.createElement('strong');
-                strongEl.textContent = `${statName}:`;
+                const nameLabel = document.createElement('strong');
+                nameLabel.textContent = `${statName}:`;
                 
-                statBox.appendChild(strongEl);
+                statBox.appendChild(nameLabel);
                 statBox.appendChild(document.createTextNode(` ${statValue}`));
                 totalFragment.appendChild(statBox);
             }
             totalGrid.appendChild(totalFragment);
-            if (bonus > 0) {
-                appendStatNote(totalGrid, `Includes Total Difficulty bonus (skill ≥ 50): +${bonus} ${isWeapon ? 'ATK' : 'DEF'} (TDU ${tdu})`);
+            if (tduBonusValue > 0) {
+                appendStatNote(totalGrid, `Includes Total Difficulty bonus (skill ≥ 50): +${tduBonusValue} ${isWeapon ? 'ATK' : 'DEF'} (TDU ${totalDifficulty})`);
             }
             statsContainer.appendChild(totalGrid);
         }
@@ -894,12 +909,12 @@ export async function initRecipeViewer() {
     // Dish level in-game is the average ingredient level (level data is not
     // available in this dataset), so base effects are shown unscaled.
     function renderFoodStats(recipe) {
-        const nonEdible = recipe.materials.some(material => {
-            const matRecipe = recipeByName.get(material);
-            return !matRecipe || !matRecipe.useStats;
+        const containsNonEdibleIngredient = recipe.materials.some(material => {
+            const materialRecipe = recipeByName.get(material);
+            return !materialRecipe || !materialRecipe.useStats;
         });
 
-        if (nonEdible) {
+        if (containsNonEdibleIngredient) {
             const warningGrid = document.createElement('div');
             warningGrid.className = 'stats-grid';
             appendStatNote(warningGrid, 'This recipe contains non-edible ingredients — in-game the dish\'s base effects become negative (unbalanced).');
@@ -908,12 +923,12 @@ export async function initRecipeViewer() {
 
         renderStatSection('Dish Effects (base)', recipe.useStats, '', 'general');
 
-        const cookTotal = sumStats(...recipe.materials.map(material => {
-            const matRecipe = recipeByName.get(material);
-            return matRecipe ? matRecipe.cookStats : null;
+        const totalCookEffects = sumStats(...recipe.materials.map(material => {
+            const materialRecipe = recipeByName.get(material);
+            return materialRecipe ? materialRecipe.cookStats : null;
         }));
-        if (Object.keys(cookTotal).length > 0) {
-            renderStatSection('Ingredient Cooking Effects', cookTotal, '', 'cook');
+        if (Object.keys(totalCookEffects).length > 0) {
+            renderStatSection('Ingredient Cooking Effects', totalCookEffects, '', 'cook');
         }
     }
 
@@ -921,7 +936,7 @@ export async function initRecipeViewer() {
         getDetailItem: () => currentDetailItem,
         resetFilters: () => resetBtn.onclick(),
         refreshLoadout: () => loadoutBuilder.refresh(),
-        isPickMode: () => !!activeTargetSlot,
+        isPickMode: () => !!inheritanceTarget,
         cancelPickMode: () => setPickMode(null)
     };
 }

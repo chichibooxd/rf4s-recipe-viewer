@@ -31,10 +31,10 @@ export class CustomItem {
         };
     }
 
-    // Reconstruct from JSON using the global appData
-    static fromJSON(json, appData) {
+    // Reconstruct from JSON using the global game data
+    static fromJSON(json, gameData) {
         if (!json || !json.id) return null;
-        const recipe = appData.recipes.find(r => r.id === json.id);
+        const recipe = gameData.recipes.find(r => r.id === json.id);
         if (!recipe) return null;
 
         const customItem = new CustomItem(recipe);
@@ -42,7 +42,7 @@ export class CustomItem {
             for (let i = 0; i < 6; i++) {
                 const slotData = json.slots[i];
                 if (slotData && typeof slotData === 'object') {
-                    customItem.slots[i] = CustomItem.fromJSON(slotData, appData);
+                    customItem.slots[i] = CustomItem.fromJSON(slotData, gameData);
                     customItem.inherited[i] = true;
                 } else {
                     customItem.slots[i] = slotData;

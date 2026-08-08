@@ -24,10 +24,10 @@ const PRODUCTION_SKILLS = ['Forging', 'Crafting', 'Chemistry', 'Cooking'];
 export function parseLevelUp(rawData) {
     const strings = rawData.strings;
     const sheets = rawData.data;
-    const sheet = sheets[strToId(rawData, 'Level Up')];
-    if (!sheet) return [];
-    const headers = sheet[0].map(id => strings[id]);
-    const idx = {
+    const sheetRows = sheets[stringIndex(rawData, 'Level Up')];
+    if (!sheetRows) return [];
+    const headers = sheetRows[0].map(id => strings[id]);
+    const columnIndices = {
         level: headers.indexOf('Level'),
         xp: headers.indexOf('XP'),
         hp: headers.indexOf('HP'),
@@ -36,70 +36,70 @@ export function parseLevelUp(rawData) {
         int: headers.indexOf('INT'),
         vit: headers.indexOf('VIT')
     };
-    const stats = [null]; // 1-indexed
-    for (let i = 1; i < sheet.length; i++) {
-        const row = sheet[i];
-        const get = (key) => idx[key] !== -1 && idx[key] < row.length ? row[idx[key]] : 0;
-        const level = get('level');
+    const levelStatsByLevel = [null]; // 1-indexed
+    for (let i = 1; i < sheetRows.length; i++) {
+        const row = sheetRows[i];
+        const readCell = (key) => columnIndices[key] !== -1 && columnIndices[key] < row.length ? row[columnIndices[key]] : 0;
+        const level = readCell('level');
         if (!Number.isFinite(level)) continue;
-        stats[level] = {
-            xp: get('xp'), hp: get('hp'), rp: get('rp'),
-            str: get('str'), int: get('int'), vit: get('vit')
+        levelStatsByLevel[level] = {
+            xp: readCell('xp'), hp: readCell('hp'), rp: readCell('rp'),
+            str: readCell('str'), int: readCell('int'), vit: readCell('vit')
         };
     }
-    return stats;
+    return levelStatsByLevel;
 }
 
 export function parseSkillStats(rawData) {
     const strings = rawData.strings;
     const sheets = rawData.data;
-    const sheet = sheets[strToId(rawData, 'Skill Stats')];
-    if (!sheet) return [];
-    const headers = sheet[0].map(id => strings[id]);
-    const idx = {
+    const sheetRows = sheets[stringIndex(rawData, 'Skill Stats')];
+    if (!sheetRows) return [];
+    const headers = sheetRows[0].map(id => strings[id]);
+    const columnIndices = {
         hp: headers.indexOf('HP'),
         rp: headers.indexOf('RP'),
         str: headers.indexOf('STR'),
         int: headers.indexOf('INT'),
         vit: headers.indexOf('VIT')
     };
-    const skills = [];
-    for (let i = 1; i < sheet.length && i <= SKILL_NAMES.length; i++) {
-        const row = sheet[i];
-        const get = (key) => idx[key] !== -1 && idx[key] < row.length ? row[idx[key]] : 0;
-        skills.push({
+    const skillStats = [];
+    for (let i = 1; i < sheetRows.length && i <= SKILL_NAMES.length; i++) {
+        const row = sheetRows[i];
+        const readCell = (key) => columnIndices[key] !== -1 && columnIndices[key] < row.length ? row[columnIndices[key]] : 0;
+        skillStats.push({
             name: SKILL_NAMES[i - 1],
-            hp: get('hp'), rp: get('rp'), str: get('str'), int: get('int'), vit: get('vit')
+            hp: readCell('hp'), rp: readCell('rp'), str: readCell('str'), int: readCell('int'), vit: readCell('vit')
         });
     }
-    return skills;
+    return skillStats;
 }
 
 export function parseCraftCosts(rawData) {
     const strings = rawData.strings;
     const sheets = rawData.data;
-    const sheet = sheets[strToId(rawData, 'Skill Action Exp')];
-    if (!sheet) return {};
-    const headers = sheet[0].map(id => strings[id]);
-    const actionIdx = headers.indexOf('Action');
-    const flatIdx = headers.indexOf('RP Cost');
-    const pctIdx = headers.indexOf('RP % Cost');
-    const costs = {};
-    for (let i = 1; i < sheet.length; i++) {
-        const row = sheet[i];
-        if (actionIdx === -1 || actionIdx >= row.length || !row[actionIdx]) continue;
-        const action = strings[row[actionIdx]];
+    const sheetRows = sheets[stringIndex(rawData, 'Skill Action Exp')];
+    if (!sheetRows) return {};
+    const headers = sheetRows[0].map(id => strings[id]);
+    const actionColumnIndex = headers.indexOf('Action');
+    const flatCostColumnIndex = headers.indexOf('RP Cost');
+    const pctCostColumnIndex = headers.indexOf('RP % Cost');
+    const craftCostsByAction = {};
+    for (let i = 1; i < sheetRows.length; i++) {
+        const row = sheetRows[i];
+        if (actionColumnIndex === -1 || actionColumnIndex >= row.length || !row[actionColumnIndex]) continue;
+        const action = strings[row[actionColumnIndex]];
         if (action !== 'Forge' && action !== 'Craft' && action !== 'Mix' && action !== 'Cook') continue;
-        if (costs[action]) continue; // keep the first occurrence
-        costs[action] = {
-            flat: flatIdx !== -1 && flatIdx < row.length ? row[flatIdx] : 0,
-            pct: pctIdx !== -1 && pctIdx < row.length ? row[pctIdx] : 0
+        if (craftCostsByAction[action]) continue; // keep the first occurrence
+        craftCostsByAction[action] = {
+            flat: flatCostColumnIndex !== -1 && flatCostColumnIndex < row.length ? row[flatCostColumnIndex] : 0,
+            pct: pctCostColumnIndex !== -1 && pctCostColumnIndex < row.length ? row[pctCostColumnIndex] : 0
         };
     }
-    return costs;
+    return craftCostsByAction;
 }
 
-function strToId(rawData, name) {
+function stringIndex(rawData, name) {
     return rawData.strings.indexOf(name);
 }
 
@@ -108,23 +108,23 @@ function strToId(rawData, name) {
 // Per-skill stat contribution. Yields floor individually before summing
 // (clepe's rounding rule); HP yields double every 50 skill levels, STR/INT/VIT
 // every 300; RP caps at skill level 100.
-function contribution(yieldVal, level, multiplierEvery, cap) {
-    const lvl = cap ? Math.min(level, cap) : level;
-    const multiplier = 1 + Math.floor((level - 1) / multiplierEvery);
-    return Math.floor(yieldVal * lvl * multiplier);
+function skillStatContribution(yieldPerLevel, skillLevel, multiplierInterval, levelCap) {
+    const cappedLevel = levelCap ? Math.min(skillLevel, levelCap) : skillLevel;
+    const multiplier = 1 + Math.floor((skillLevel - 1) / multiplierInterval);
+    return Math.floor(yieldPerLevel * cappedLevel * multiplier);
 }
 
 export function computeCharacterStats(level, skillLevels, levelStats, skillStats) {
     const base = (levelStats && levelStats[level]) || { hp: 0, rp: 0, str: 0, int: 0, vit: 0 };
     const totals = { hp: base.hp, rp: base.rp, str: base.str, int: base.int, vit: base.vit };
     (skillStats || []).forEach((skill, i) => {
-        const lvl = skillLevels[i] || 0;
-        if (lvl <= 0) return;
-        totals.hp += contribution(skill.hp, lvl, 50, null);
-        totals.rp += contribution(skill.rp, lvl, Infinity, 100);
-        totals.str += contribution(skill.str, lvl, 300, null);
-        totals.int += contribution(skill.int, lvl, 300, null);
-        totals.vit += contribution(skill.vit, lvl, 300, null);
+        const skillLevel = skillLevels[i] || 0;
+        if (skillLevel <= 0) return;
+        totals.hp += skillStatContribution(skill.hp, skillLevel, 50, null);
+        totals.rp += skillStatContribution(skill.rp, skillLevel, Infinity, 100);
+        totals.str += skillStatContribution(skill.str, skillLevel, 300, null);
+        totals.int += skillStatContribution(skill.int, skillLevel, 300, null);
+        totals.vit += skillStatContribution(skill.vit, skillLevel, 300, null);
     });
     // Derived combat stats (equipment adds on top)
     totals.atk = totals.str;
@@ -138,12 +138,37 @@ export function craftRpCost(cost, maxRp) {
     return cost.flat + Math.round(maxRp * cost.pct);
 }
 
+// Action key per skill (matches the Skill Action Exp sheet)
+const SKILL_ACTION = {
+    Forging: 'Forge',
+    Crafting: 'Craft',
+    Chemistry: 'Mix',
+    Cooking: 'Cook'
+};
+
+// Shared state so the recipe detail can show craft costs from the planner
+let lastComputedStats = null;
+let craftCostsByAction = {};
+
+export function getPlannerMaxRp() {
+    return lastComputedStats ? lastComputedStats.rp : null;
+}
+
+// RP cost to craft the given skill with the planner's current max RP
+export function getCraftRpCostForSkill(skill) {
+    const maxRp = getPlannerMaxRp();
+    const action = SKILL_ACTION[skill];
+    if (maxRp === null || !action || !craftCostsByAction[action]) return null;
+    return craftRpCost(craftCostsByAction[action], maxRp);
+}
+
 // --- UI ---
 
 export function initPlanner(rawData) {
     const levelStats = parseLevelUp(rawData);
     const skillStats = parseSkillStats(rawData);
     const craftCosts = parseCraftCosts(rawData);
+    craftCostsByAction = craftCosts;
 
     const skillsContainer = document.getElementById('planner-skills');
     const statsGrid = document.getElementById('planner-stats');
@@ -156,8 +181,8 @@ export function initPlanner(rawData) {
 
     function buildSkillInputs() {
         // Production skills first, then the rest in a collapsible group
-        const production = skillStats.filter(s => PRODUCTION_SKILLS.includes(s.name));
-        const others = skillStats.filter(s => !PRODUCTION_SKILLS.includes(s.name));
+        const production = skillStats.filter(skill => PRODUCTION_SKILLS.includes(skill.name));
+        const others = skillStats.filter(skill => !PRODUCTION_SKILLS.includes(skill.name));
 
         const groups = [
             { title: 'Production Skills', skills: production, open: true },
@@ -165,78 +190,79 @@ export function initPlanner(rawData) {
         ];
 
         groups.forEach(group => {
-            const details = document.createElement('details');
-            details.className = 'planner-group';
-            details.open = group.open;
-            const summary = document.createElement('summary');
-            summary.textContent = group.title;
-            details.appendChild(summary);
+            const groupDetails = document.createElement('details');
+            groupDetails.className = 'planner-group';
+            groupDetails.open = group.open;
+            const groupSummary = document.createElement('summary');
+            groupSummary.textContent = group.title;
+            groupDetails.appendChild(groupSummary);
 
-            const list = document.createElement('div');
-            list.className = 'planner-skill-list';
+            const skillList = document.createElement('div');
+            skillList.className = 'planner-skill-list';
             group.skills.forEach(skill => {
-                const row = document.createElement('label');
-                row.className = 'planner-skill';
-                row.textContent = skill.name;
+                const skillRow = document.createElement('label');
+                skillRow.className = 'planner-skill';
+                skillRow.textContent = skill.name;
 
-                const input = document.createElement('input');
-                input.type = 'number';
-                input.min = 0;
-                input.max = 999;
-                input.value = 0;
-                input.setAttribute('aria-label', `${skill.name} level`);
-                input.addEventListener('change', () => {
+                const levelInputEl = document.createElement('input');
+                levelInputEl.type = 'number';
+                levelInputEl.min = 0;
+                levelInputEl.max = 999;
+                levelInputEl.value = 0;
+                levelInputEl.setAttribute('aria-label', `${skill.name} level`);
+                levelInputEl.addEventListener('change', () => {
                     saveState();
                     recompute();
                 });
-                skillInputs.set(skill.name, input);
-                row.appendChild(input);
-                list.appendChild(row);
+                skillInputs.set(skill.name, levelInputEl);
+                skillRow.appendChild(levelInputEl);
+                skillList.appendChild(skillRow);
             });
-            details.appendChild(list);
-            skillsContainer.appendChild(details);
+            groupDetails.appendChild(skillList);
+            skillsContainer.appendChild(groupDetails);
         });
     }
 
     function recompute() {
         const level = Math.max(1, Math.min(200, parseInt(levelInput.value, 10) || 1));
         const skillLevels = skillStats.map(skill => parseInt(skillInputs.get(skill.name).value, 10) || 0);
-        const stats = computeCharacterStats(level, skillLevels, levelStats, skillStats);
+        const computedStats = computeCharacterStats(level, skillLevels, levelStats, skillStats);
+        lastComputedStats = computedStats;
 
         statsGrid.replaceChildren();
-        const entries = [
-            ['HP', stats.hp], ['RP', stats.rp], ['STR', stats.str], ['INT', stats.int],
-            ['VIT', stats.vit], ['ATK', stats.atk], ['M.ATK', stats.matk],
-            ['DEF', stats.def], ['M.DEF', stats.mdef]
+        const statEntries = [
+            ['HP', computedStats.hp], ['RP', computedStats.rp], ['STR', computedStats.str], ['INT', computedStats.int],
+            ['VIT', computedStats.vit], ['ATK', computedStats.atk], ['M.ATK', computedStats.matk],
+            ['DEF', computedStats.def], ['M.DEF', computedStats.mdef]
         ];
-        const fragment = document.createDocumentFragment();
-        entries.forEach(([name, value]) => {
-            const box = document.createElement('div');
-            box.className = 'stat-box';
-            const strong = document.createElement('strong');
-            strong.textContent = `${name}:`;
-            box.appendChild(strong);
-            box.appendChild(document.createTextNode(` ${value}`));
+        const boxFragment = document.createDocumentFragment();
+        statEntries.forEach(([statName, statValue]) => {
+            const statBox = document.createElement('div');
+            statBox.className = 'stat-box';
+            const nameLabel = document.createElement('strong');
+            nameLabel.textContent = `${statName}:`;
+            statBox.appendChild(nameLabel);
+            statBox.appendChild(document.createTextNode(` ${statValue}`));
             // import lazily to avoid circular imports
-            import('../utils/stat-info.js').then(({ attachStatInfo }) => attachStatInfo(box, name, 'general'));
-            fragment.appendChild(box);
+            import('../utils/stat-info.js').then(({ attachStatInfo }) => attachStatInfo(statBox, statName, 'general'));
+            boxFragment.appendChild(statBox);
         });
-        statsGrid.appendChild(fragment);
+        statsGrid.appendChild(boxFragment);
 
         // Craft RP costs
         costsGrid.replaceChildren();
-        const skillNames = {
+        const actionSkillNames = {
             Forge: 'Forging', Craft: 'Crafting', Mix: 'Chemistry', Cook: 'Cooking'
         };
         Object.entries(craftCosts).forEach(([action, cost]) => {
-            const rpCost = craftRpCost(cost, stats.rp);
-            const perCraft = document.createElement('div');
-            perCraft.className = 'stat-box';
-            const strong = document.createElement('strong');
-            strong.textContent = `${skillNames[action]}:`;
-            perCraft.appendChild(strong);
-            perCraft.appendChild(document.createTextNode(` ${rpCost} RP (${Math.floor(stats.rp / rpCost)} crafts)`));
-            costsGrid.appendChild(perCraft);
+            const rpCost = craftRpCost(cost, computedStats.rp);
+            const costBox = document.createElement('div');
+            costBox.className = 'stat-box';
+            const nameLabel = document.createElement('strong');
+            nameLabel.textContent = `${actionSkillNames[action]}:`;
+            costBox.appendChild(nameLabel);
+            costBox.appendChild(document.createTextNode(` ${rpCost} RP (${Math.floor(computedStats.rp / rpCost)} crafts)`));
+            costsGrid.appendChild(costBox);
         });
 
         notes.textContent = 'Craft success percentage and XP gained per craft are not yet available — those formulas are game logic and still under research.';

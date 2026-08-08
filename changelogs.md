@@ -4,6 +4,24 @@ All notable changes to RF4 Recipe Viewer are documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to a cache-bumped version scheme (`rf4-recipes-vN` in `sw.js`).
 
+## [v16] - 2026-08-08
+
+### Added
+- Recipe details now show the **craft RP cost** for production recipes, derived from the
+  planner's current max RP (Forge/Craft 16 + 6.35%, Mix 12 + 4.76%, Cook 5 + 3.81%), with
+  how many crafts the current max RP allows.
+- **Loadout totals show the complete combat stat list** (37 stats, zeros included) instead
+  of only non-zero sums; planner already shows the full character stat set.
+- **Loadout persists to localStorage** (`rf4-loadout`) on every change and restores on
+  startup — equipped items and inheritance survive service-worker cache updates
+  (planner state was already persisted).
+
+### Fixed
+- Loadout total stats were cut off at the bottom by the tab bar — the stats section now
+  scrolls clear of it.
+
+---
+
 ## [v15] - 2026-08-08
 
 ### Added

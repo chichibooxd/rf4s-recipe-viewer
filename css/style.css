@@ -138,7 +138,7 @@ select, .detail-slot {
     color: white;
 }
 /* Keep scrollable content clear of the tab bar */
-#results-container, .stats-container, .loadout-slots { padding-bottom: 72px; }
+#results-container, .stats-container, .loadout-slots, .loadout-stats { padding-bottom: 72px; }
 
 /* Stat info tooltip */
 .stat-box { cursor: pointer; }

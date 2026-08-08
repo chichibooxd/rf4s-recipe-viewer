@@ -1,13 +1,13 @@
 import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus } from '../models/custom-item.js';
-import { attachStatInfo } from '../utils/stat-info.js';
+import { attachStatInfo, COMBAT_STAT_ORDER } from '../utils/stat-info.js';
 
 export class LoadoutBuilder {
-    constructor(appData, onSlotEmptyClick, onSlotFilledClick, onNavigate) {
-        this.appData = appData;
+    constructor(gameData, onSlotEmptyClick, onSlotFilledClick, onNavigate) {
+        this.gameData = gameData;
         this.onSlotEmptyClick = onSlotEmptyClick;
         this.onSlotFilledClick = onSlotFilledClick;
         this.onNavigate = onNavigate;
-        this.recipeByName = new Map(appData.recipes.map(r => [r.name, r]));
+        this.recipeByName = new Map(gameData.recipes.map(recipe => [recipe.name, recipe]));
         this.slots = {
             Weapon: null,
             Shield: null,
@@ -23,6 +23,7 @@ export class LoadoutBuilder {
         ];
 
         this.initUI();
+        this.restoreLoadout();
     }
 
     initUI() {
@@ -61,6 +62,7 @@ export class LoadoutBuilder {
         if (slot) {
             this.slots[slot] = item instanceof CustomItem ? item : new CustomItem(item);
             this.refresh();
+            this.persist();
             this.onNavigate('#/loadout');
         } else {
             alert("This item cannot be equipped.");
@@ -70,39 +72,65 @@ export class LoadoutBuilder {
     removeItem(slot) {
         this.slots[slot] = null;
         this.refresh();
+        this.persist();
+    }
+
+    // --- localStorage persistence (survives service-worker cache updates) ---
+
+    persist() {
+        try {
+            const data = {};
+            for (const slot in this.slots) {
+                if (this.slots[slot]) data[slot] = this.slots[slot].toJSON();
+            }
+            localStorage.setItem('rf4-loadout', JSON.stringify(data));
+        } catch (e) { /* storage unavailable */ }
+    }
+
+    restoreLoadout() {
+        try {
+            const saved = JSON.parse(localStorage.getItem('rf4-loadout') || 'null');
+            if (!saved) return;
+            for (const slot in this.slots) {
+                if (saved[slot]) {
+                    this.slots[slot] = CustomItem.fromJSON(saved[slot], this.gameData);
+                }
+            }
+            this.refresh();
+        } catch (e) { /* storage unavailable or corrupt data */ }
     }
 
     renderSlots() {
         this.slotsContainer.replaceChildren();
-        const fragment = document.createDocumentFragment();
+        const slotFragment = document.createDocumentFragment();
         Object.keys(this.slots).forEach(slot => {
             const item = this.slots[slot];
-            const slotEl = document.createElement('div');
-            slotEl.className = 'loadout-slot';
+            const slotElement = document.createElement('div');
+            slotElement.className = 'loadout-slot';
             
-            const titleEl = document.createElement('h4');
-            titleEl.textContent = slot;
-            slotEl.appendChild(titleEl);
+            const slotTitle = document.createElement('h4');
+            slotTitle.textContent = slot;
+            slotElement.appendChild(slotTitle);
 
             if (item) {
-                const nameEl = document.createElement('div');
-                nameEl.className = 'item-name';
-                nameEl.textContent = item instanceof CustomItem ? item.baseRecipe.name : item.name;
-                slotEl.appendChild(nameEl);
+                const itemNameEl = document.createElement('div');
+                itemNameEl.className = 'item-name';
+                itemNameEl.textContent = item instanceof CustomItem ? item.baseRecipe.name : item.name;
+                slotElement.appendChild(itemNameEl);
 
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'remove-btn';
                 removeBtn.textContent = 'X';
                 removeBtn.addEventListener('click', () => this.removeItem(slot));
-                slotEl.appendChild(removeBtn);
+                slotElement.appendChild(removeBtn);
             } else {
-                const emptyEl = document.createElement('div');
-                emptyEl.className = 'empty-text';
-                emptyEl.textContent = 'Empty — tap to equip';
-                slotEl.appendChild(emptyEl);
+                const emptyLabel = document.createElement('div');
+                emptyLabel.className = 'empty-text';
+                emptyLabel.textContent = 'Empty — tap to equip';
+                slotElement.appendChild(emptyLabel);
             }
             
-            slotEl.addEventListener('click', (e) => {
+            slotElement.addEventListener('click', (e) => {
                 // Ignore if clicked the remove button
                 if (e.target.classList.contains('remove-btn')) return;
                 
@@ -113,9 +141,9 @@ export class LoadoutBuilder {
                 }
             });
 
-            fragment.appendChild(slotEl);
+            slotFragment.appendChild(slotElement);
         });
-        this.slotsContainer.appendChild(fragment);
+        this.slotsContainer.appendChild(slotFragment);
     }
 
     renderStats() {
@@ -143,26 +171,19 @@ export class LoadoutBuilder {
         });
         const totalStats = sumStats(...contributionParts);
 
-        if (Object.keys(totalStats).length === 0) {
-            const emptyEl = document.createElement('div');
-            emptyEl.className = 'empty-text';
-            emptyEl.textContent = 'No stats available';
-            this.statsGrid.appendChild(emptyEl);
-            return;
-        }
-
-        const fragment = document.createDocumentFragment();
-        Object.entries(totalStats).forEach(([stat, val]) => {
+        // Show the complete stat list (zeros included) so nothing is hidden
+        const boxFragment = document.createDocumentFragment();
+        COMBAT_STAT_ORDER.forEach(stat => {
             const statBox = document.createElement('div');
             statBox.className = 'stat-box';
             
-            const strongEl = document.createElement('strong');
-            strongEl.textContent = `${stat}:`;
+            const nameLabel = document.createElement('strong');
+            nameLabel.textContent = `${stat}:`;
             
-            statBox.appendChild(strongEl);
-            statBox.appendChild(document.createTextNode(` ${val}`));
+            statBox.appendChild(nameLabel);
+            statBox.appendChild(document.createTextNode(` ${totalStats[stat] || 0}`));
             attachStatInfo(statBox, stat, 'general');
-            fragment.appendChild(statBox);
+            boxFragment.appendChild(statBox);
         });
 
         if (tduAtk > 0 || tduDef > 0) {
@@ -172,10 +193,10 @@ export class LoadoutBuilder {
             if (tduAtk > 0) parts.push(`+${tduAtk} ATK`);
             if (tduDef > 0) parts.push(`+${tduDef} DEF`);
             note.textContent = `Includes Total Difficulty bonus (skill ≥ 50): ${parts.join(', ')}`;
-            fragment.appendChild(note);
+            boxFragment.appendChild(note);
         }
 
-        this.statsGrid.appendChild(fragment);
+        this.statsGrid.appendChild(boxFragment);
     }
 
     // --- Share / Import modal ---
@@ -193,96 +214,97 @@ export class LoadoutBuilder {
     }
 
     openModal(mode) {
-        const m = this.getModal();
-        m.title.textContent = mode === 'export' ? 'Your Loadout Code' : 'Import Loadout Code';
-        m.status.textContent = '';
-        m.status.className = 'modal-status';
-        m.overlay.hidden = false;
+        const modal = this.getModal();
+        modal.title.textContent = mode === 'export' ? 'Your Loadout Code' : 'Import Loadout Code';
+        modal.status.textContent = '';
+        modal.status.className = 'modal-status';
+        modal.overlay.hidden = false;
         document.getElementById('code-copy-btn').classList.toggle('primary', mode === 'export');
         document.getElementById('code-import-btn').classList.toggle('primary', mode === 'import');
     }
 
     closeModal() {
-        const m = this.getModal();
-        m.overlay.hidden = true;
-        m.status.textContent = '';
+        const modal = this.getModal();
+        modal.overlay.hidden = true;
+        modal.status.textContent = '';
     }
 
     openExportModal() {
-        const m = this.getModal();
-        m.textarea.value = this.encodeLoadout();
+        const modal = this.getModal();
+        modal.textarea.value = this.encodeLoadout();
         this.openModal('export');
-        m.textarea.focus();
-        m.textarea.select();
+        modal.textarea.focus();
+        modal.textarea.select();
     }
 
     openImportModal() {
-        const m = this.getModal();
-        m.textarea.value = '';
+        const modal = this.getModal();
+        modal.textarea.value = '';
         this.openModal('import');
-        m.textarea.focus();
+        modal.textarea.focus();
     }
 
     encodeLoadout() {
-        const exportData = {};
+        const loadoutData = {};
         for (const slot in this.slots) {
             if (this.slots[slot]) {
-                exportData[slot] = this.slots[slot].toJSON();
+                loadoutData[slot] = this.slots[slot].toJSON();
             }
         }
         // Use encodeURIComponent to handle unicode safely before btoa
-        return btoa(encodeURIComponent(JSON.stringify(exportData)));
+        return btoa(encodeURIComponent(JSON.stringify(loadoutData)));
     }
 
-    decodeLoadout(code) {
-        const jsonString = decodeURIComponent(atob(code));
-        return JSON.parse(jsonString);
+    decodeLoadout(loadoutCode) {
+        const decodedJson = decodeURIComponent(atob(loadoutCode));
+        return JSON.parse(decodedJson);
     }
 
     copyFromModal() {
-        const m = this.getModal();
-        const code = m.textarea.value;
-        if (!code) {
-            m.status.className = 'modal-status error';
-            m.status.textContent = 'Nothing to copy — generate a code first.';
+        const modal = this.getModal();
+        const loadoutCode = modal.textarea.value;
+        if (!loadoutCode) {
+            modal.status.className = 'modal-status error';
+            modal.status.textContent = 'Nothing to copy — generate a code first.';
             return;
         }
-        navigator.clipboard.writeText(code).then(() => {
-            m.status.className = 'modal-status';
-            m.status.textContent = 'Copied to clipboard!';
+        navigator.clipboard.writeText(loadoutCode).then(() => {
+            modal.status.className = 'modal-status';
+            modal.status.textContent = 'Copied to clipboard!';
         }).catch(() => {
             // Non-secure context (file:// or LAN): fall back to manual selection
-            m.textarea.focus();
-            m.textarea.select();
-            m.status.className = 'modal-status';
-            m.status.textContent = 'Copy failed — the text is selected, press copy on your device.';
+            modal.textarea.focus();
+            modal.textarea.select();
+            modal.status.className = 'modal-status';
+            modal.status.textContent = 'Copy failed — the text is selected, press copy on your device.';
         });
     }
 
     importFromModal() {
-        const m = this.getModal();
-        const code = m.textarea.value.trim();
-        if (!code) {
-            m.status.className = 'modal-status error';
-            m.status.textContent = 'Paste a loadout code first.';
+        const modal = this.getModal();
+        const loadoutCode = modal.textarea.value.trim();
+        if (!loadoutCode) {
+            modal.status.className = 'modal-status error';
+            modal.status.textContent = 'Paste a loadout code first.';
             return;
         }
         try {
-            const importData = this.decodeLoadout(code);
+            const importData = this.decodeLoadout(loadoutCode);
             for (const slot in this.slots) {
                 if (importData[slot]) {
-                    this.slots[slot] = CustomItem.fromJSON(importData[slot], this.appData);
+                    this.slots[slot] = CustomItem.fromJSON(importData[slot], this.gameData);
                 } else {
                     this.slots[slot] = null;
                 }
             }
             this.refresh();
+            this.persist();
             this.closeModal();
             this.onNavigate('#/loadout');
         } catch (e) {
             console.error(e);
-            m.status.className = 'modal-status error';
-            m.status.textContent = 'Invalid loadout code.';
+            modal.status.className = 'modal-status error';
+            modal.status.textContent = 'Invalid loadout code.';
         }
     }
 }
