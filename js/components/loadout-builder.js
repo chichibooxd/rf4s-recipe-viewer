@@ -1,4 +1,5 @@
 import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus } from '../models/custom-item.js';
+import { attachStatInfo } from '../utils/stat-info.js';
 
 export class LoadoutBuilder {
     constructor(appData, onSlotEmptyClick, onSlotFilledClick, onNavigate) {
@@ -160,6 +161,7 @@ export class LoadoutBuilder {
             
             statBox.appendChild(strongEl);
             statBox.appendChild(document.createTextNode(` ${val}`));
+            attachStatInfo(statBox, stat, 'general');
             fragment.appendChild(statBox);
         });
 

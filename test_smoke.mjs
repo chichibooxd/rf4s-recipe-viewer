@@ -33,6 +33,9 @@ function makeEl(tag = 'div') {
             }
             return child;
         },
+        getBoundingClientRect() {
+            return { left: 0, top: 0, width: 100, height: 20, right: 100, bottom: 20 };
+        },
         append(...kids) { kids.forEach(k => this.children.push(k)); },
         replaceChildren(...kids) { this.children = [...kids]; },
         addEventListener(type, fn) { (this._listeners[type] ||= []).push(fn); },
@@ -65,8 +68,10 @@ function makeEl(tag = 'div') {
     return el;
 }
 
+const documentListeners = {};
 const document = {
     activeElement: null,
+    body: null,
     getElementById(id) {
         if (!byId[id]) byId[id] = makeEl('div');
         return byId[id];
@@ -78,7 +83,11 @@ const document = {
     createElement(tag) { return makeEl(tag); },
     createDocumentFragment() { return makeEl('#fragment'); },
     createTextNode(t) { return { text: String(t), textContent: String(t) }; },
-    contains() { return true; }
+    contains() { return true; },
+    addEventListener(type, fn) { (documentListeners[type] ||= []).push(fn); },
+    removeEventListener(type, fn) {
+        if (documentListeners[type]) documentListeners[type] = documentListeners[type].filter(f => f !== fn);
+    }
 };
 
 const hashListeners = [];
@@ -123,6 +132,8 @@ globalThis.location = location;
 globalThis.history = history;
 Object.defineProperty(globalThis, 'navigator', { value: navigator, configurable: true, writable: true });
 globalThis.window = {
+    innerWidth: 400,
+    innerHeight: 800,
     addEventListener(type, fn) { if (type === 'hashchange') hashListeners.push(fn); },
     dispatchEvent(ev) {
         if (ev.type === 'routechange') routeListeners.forEach(fn => fn(ev));
@@ -374,6 +385,22 @@ fire(byId['code-close-btn'], 'click');
 
 // --- 9. Route refresh restore: direct load on detail route ---
 hashListeners.forEach(fn => fn());
+
+// --- 10. Stat glossary + tooltip ---
+{
+    const { statDescription, attachStatInfo } = await import(APP + 'js/utils/stat-info.js');
+    check('glossary: STR explains +1 ATK', statDescription('STR').includes('+1 ATK'));
+    check('glossary: VIT explains 0.5 DEF/MDEF', statDescription('VIT').includes('0.5 DEF'));
+    check('glossary: RP explained as rune points', statDescription('RP').includes('Rune'));
+    check('glossary: cook fallback', statDescription('CustomStat', 'cook').includes('Cooking effect'));
+    check('glossary: upgrade fallback', statDescription('CustomStat', 'upgrade').includes('Upgrade effect'));
+    document.body = makeEl('body');
+    const box = makeEl('div');
+    attachStatInfo(box, 'STR', 'general');
+    fire(box, 'click', { target: box, stopPropagation() {} });
+    check('tooltip shown on stat click', !!document.body.children.find(c => c.className.includes('stat-tooltip')) &&
+        document.body.children.find(c => c.className.includes('stat-tooltip')).textContent.includes('Strength'));
+}
 
 console.log(failures === 0 ? '\nSMOKE TEST PASSED' : `\nSMOKE TEST FAILED (${failures})`);
 process.exit(failures === 0 ? 0 : 1);

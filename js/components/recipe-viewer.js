@@ -1,5 +1,6 @@
 import { LoadoutBuilder } from './loadout-builder.js';
 import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus } from '../models/custom-item.js';
+import { attachStatInfo } from '../utils/stat-info.js';
 
 // Base effects of usable items (dishes, medicine) from the Item Use Values sheet
 const USE_COLS = [
@@ -706,7 +707,7 @@ export async function initRecipeViewer() {
     let currentEquipHandler = null;
 
     // Render a stat grid section into the stats container
-    function renderStatSection(heading, entries, extraClass = '') {
+    function renderStatSection(heading, entries, extraClass = '', context = 'general') {
         if (!entries || Object.keys(entries).length === 0) return;
         const statsHeading = document.createElement('h3');
         statsHeading.textContent = heading;
@@ -725,6 +726,7 @@ export async function initRecipeViewer() {
             
             statBox.appendChild(strongEl);
             statBox.appendChild(document.createTextNode(` ${statValue}`));
+            attachStatInfo(statBox, statName, context);
             fragment.appendChild(statBox);
         }
         statsGrid.appendChild(fragment);
@@ -830,11 +832,11 @@ export async function initRecipeViewer() {
     // Equipment: base + inherited-only contributions (max 3 extra items in-game)
     // + Total Difficulty Used (TDU) tier bonus.
     function renderEquipmentStats(item, recipe, isWeapon) {
-        renderStatSection('Base Combat Stats', recipe.baseStats);
+        renderStatSection('Base Combat Stats', recipe.baseStats, '', 'general');
 
         const inherited = inheritedStats(item, recipeByName);
         if (inherited.count > 0) {
-            renderStatSection('Inheritance Effects', inherited.stats);
+            renderStatSection('Inheritance Effects', inherited.stats, '', 'upgrade');
             if (inherited.count >= 3) {
                 const noteGrid = document.createElement('div');
                 noteGrid.className = 'stats-grid';
@@ -879,7 +881,7 @@ export async function initRecipeViewer() {
         }
 
         // What this item contributes when used as a material in another item
-        renderStatSection('As Upgrade Material', recipe.upgradeStats);
+        renderStatSection('As Upgrade Material', recipe.upgradeStats, '', 'upgrade');
     }
 
     // Food/medicine: base use effects + hidden cooking effects of ingredients.
@@ -898,14 +900,14 @@ export async function initRecipeViewer() {
             statsContainer.appendChild(warningGrid);
         }
 
-        renderStatSection('Dish Effects (base)', recipe.useStats);
+        renderStatSection('Dish Effects (base)', recipe.useStats, '', 'general');
 
         const cookTotal = sumStats(...recipe.materials.map(material => {
             const matRecipe = recipeByName.get(material);
             return matRecipe ? matRecipe.cookStats : null;
         }));
         if (Object.keys(cookTotal).length > 0) {
-            renderStatSection('Ingredient Cooking Effects', cookTotal);
+            renderStatSection('Ingredient Cooking Effects', cookTotal, '', 'cook');
         }
     }
 

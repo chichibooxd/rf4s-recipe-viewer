@@ -1,10 +1,7 @@
 <div id="search-screen" class="screen active">
     <header>
         <h2>Recipe Search</h2>
-        <div>
-            <button id="reset-btn" type="button">Clear</button>
-            <button id="toggle-nav-search-btn" type="button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false">☰</button>
-        </div>
+        <button id="reset-btn" type="button">Clear</button>
     </header>
 
     <div class="filter-bar">
@@ -36,10 +33,7 @@
     <header>
         <button id="back-btn" type="button">⬅ Back</button>
         <h2 id="detail-title" class="screen-title" aria-live="polite">Recipe Details</h2>
-        <div>
-            <button id="equip-btn" class="equip-btn" type="button">Equip</button>
-            <button id="toggle-nav-recipe-btn" type="button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false">☰</button>
-        </div>
+        <button id="equip-btn" class="equip-btn" type="button">Equip</button>
     </header>
     <div class="matrix-container">
         <div class="grid-2x3" id="detail-grid" role="group" aria-label="Recipe material slots"></div>
@@ -51,7 +45,6 @@
 <div id="loadout-screen" class="screen">
     <header>
         <h2>Loadout Editor</h2>
-        <button id="toggle-nav-loadout-btn" type="button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false">☰</button>
     </header>
     <div class="loadout-actions">
         <button id="share-loadout-btn" type="button">Copy Code</button>
@@ -81,15 +74,8 @@
     </div>
 </div>
 
-<!-- Navigation Sidebar Overlay -->
-<div id="nav-overlay" class="loadout-overlay" aria-hidden="true"></div>
-<div id="nav-sidebar" class="loadout-sidebar" role="dialog" aria-modal="true" aria-label="Navigation menu" aria-hidden="true">
-    <div class="loadout-header">
-        <h2>Menu</h2>
-        <button id="close-nav-btn" type="button" aria-label="Close menu">✕</button>
-    </div>
-    <nav class="nav-links">
-        <button id="nav-recipe-viewer" type="button">Recipe Viewer</button>
-        <button id="nav-loadout-editor" type="button">Loadout Editor</button>
-    </nav>
-</div>
+<!-- Bottom tab navigation -->
+<nav id="bottom-nav" aria-label="Main navigation">
+    <button id="tab-recipes" type="button" aria-current="page">Recipes</button>
+    <button id="tab-loadout" type="button">Loadout</button>
+</nav>

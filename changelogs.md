@@ -8,12 +8,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and th
 
 ### Added
 - Hash-based routing (`#/search`, `#/recipe/<id>`, `#/loadout`) with browser history support; back/forward and Android hardware back now walk the screen stack.
+- Persistent bottom tab bar (Recipes / Loadout) replacing the hamburger sidebar — one-tap switching between the two main pages from any screen.
+- Click-to-explore tooltips on every stat and effect box (equipment stats, dish effects, cooking effects, upgrade effects) explaining what the value does, backed by a stat glossary (`js/utils/stat-info.js`).
 - Visible inheritance pick banner on the search screen when picking a material for an empty recipe slot, with a Cancel action that preserves filters.
-- Hamburger nav button on the recipe detail screen (global navigation from every screen, per spec).
 - Empty states for the results list: filter hint when idle, "no matches" message when filtered out.
 - Unified share/import modal for loadout codes (replaces `prompt()`/`alert()`, which are unreliable on iOS Safari).
-- Active-page highlighting (`aria-current`) in the sidebar navigation.
 - Click-to-open details for filled material slots that have their own recipe.
+- `plan/all-in-one-roadmap.md`: research on all remaining RF4 resources (Stats Guide, Blacksmith guide, All Topics guide, rarity table) with a data-supported build plan for the all-in-one crafting tool.
 
 ### Changed
 - Back button on the detail screen now returns to the screen the user actually came from (search, loadout, or inheritance flow) instead of always search.
@@ -21,10 +22,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and th
 - Empty Weapon slot navigation now shows all Forging weapons instead of defaulting to Short Sword.
 - Result list renders ingredients by their item category (e.g. Collectible, Dairy) without a misleading `Lv.0`.
 - Screen state refactored behind an exported API from `initRecipeViewer`; all 12 direct screen toggles migrated to the hash router (`#/search`, `#/recipe/<id>`, `#/loadout`).
+- Navigation simplified: hamburger sidebar removed in favor of a persistent bottom tab bar; active tab highlighted with `aria-current`.
 - Pick-mode navigation uses history replacement (no extra back entries); pick mode clears on any navigation away from the search screen.
 - Loadout/equipment totals now include `upgradeStats` contributed by every slot material — plain materials (e.g. Iron, Gold) and inherited crafted items alike. Nested crafted items contribute their own upgrade value only (their materials no longer double-count).
 - Recipe detail screen gained "Material Stats" and "Total Stats" sections (base + materials) alongside the existing base and inherited stats.
-- Sidebar accessibility: `aria-hidden` toggles with visibility, Escape closes, focus returns to the trigger, `aria-expanded` on hamburger buttons, Tab contained within the open sidebar.
+- Sidebar accessibility: `aria-hidden` toggles with visibility, Escape closes, focus returns to the trigger, `aria-expanded` on hamburger buttons, Tab contained within the open sidebar. (Superseded by the bottom tab bar.)
 
 ### Fixed
 - Duplicate `.detail-slot` CSS rules removed (style.css).
