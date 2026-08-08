@@ -5,6 +5,7 @@ cooking recipes with an inheritance-aware loadout editor. Vanilla JS PWA — no 
 
 - **Specifications:** [specs.md](specs.md)
 - **Implementation details:** [implementation.md](implementation.md)
+- **Formula reference & sources:** [docs/formulas.md](docs/formulas.md), [docs/sources.md](docs/sources.md)
 - **Changelog:** [changelogs.md](changelogs.md)
 
 ## Usage

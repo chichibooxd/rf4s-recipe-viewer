@@ -11,7 +11,8 @@
 ├── icon-512.png         # PWA icon
 ├── package.json         # Test harness metadata (Node ESM)
 ├── test_custom_item.js  # Unit tests for the CustomItem model
-├── test_smoke.mjs       # DOM-stub end-to-end smoke test (routing, filters, loadout)
+├── test_smoke.mjs       # DOM-stub end-to-end smoke test (routing, filters, loadout, planner)
+├── docs/                # Formula reference (formulas.md) and sources (sources.md)
 │
 ├── css/
 │   └── style.css        # Application styling and layout (Flexbox/Grid)
