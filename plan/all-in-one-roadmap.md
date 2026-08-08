@@ -45,23 +45,28 @@ Anketam's Item Rarity Table (GameFAQs FAQ 68669). Cross-checked against the app'
 - `Skill Level Up` sheet has the XP-to-next-level thresholds, so once the per-craft XP
   formula is known, level-up prediction is fully data-supported.
 
-### 6. TLU (Total Level Used) tier bonus — DATA GAP
-- Per-item levels (1–10) are absent from the dump (only difficulty is present).
-- **Option:** item levels are typically fixed per drop source; the app could let users
-  enter material levels in the planner and compute TLU tiers (30/60/90/120/150 →
-  +10/+25/+70/+200/+700 ATK weapons; +6/+15/+36/+180/+350 DEF armor, incl. M.ATK/M.DEF).
+### 6. TLU (Total Level Used) tier bonus — IMPLEMENTED via user-entered levels
+- Per-item levels (1–10) are absent from the dump, so the crafting planner lets users
+  enter material levels and computes the TLU tiers (30/60/90/120/150 → +10/+25/+70/+200/+700
+  ATK weapons; +6/+15/+36/+180/+350 DEF armor, incl. M.ATK/M.DEF).
+
+## Implemented additions (2026-08-08)
+
+- **Full crafting planner view** (on equipment recipe details): material levels (1–10),
+  Extra/inheritance checkboxes (max 3), skill level input, and live output of TLU bonus
+  (now computable via entered levels), TDU bonus, inherited effects, totals, and RP cost.
+- **Elemental stones / cores:** weapon base elements parsed from the `Attribute` column;
+  elemental-stone element selection in the planner; Green/Blue/Red/Yellow Core detection
+  with the all-four +10% non-elemental resistance note.
+- **Overwrite / override planning:** same-category base-stat override, plus Light Ore
+  cross-category override (weapons only).
+- **Inherited info dissemination:** loadout slots show inherited items and element;
+  detail screen keeps the full sections.
 
 ## Other aspects worth implementing (from the guides)
 
-- **Shield-scaling by weapon type** (ANelson): 1-handed sword = full shield DEF/MDEF;
-  spear/long sword/staff/axe/hammer = reduced; dual blades/fists = none unless a Dragon
-  Scale upgrade is present. Could be shown as a hint in the loadout.
-- **Overwrite/override planning** (Kirbye/NeoZephyre): same-category item subcomponent
-  replaces base stats; Light Ore for cross-category. A "crafting planner" mode could model
-  this (base stats from the material item instead of the recipe).
 - **Double Steel (×2) / 10-Fold Steel (×8)** upgrade multipliers and repeat-upgrade
   halving (50%/25%/12.5%…) — relevant if the tool ever models post-craft upgrading.
-- **Element stones** add/remove weapon elements; **cores** give non-elemental resistance.
 - **Recipe lists cross-check:** GameFAQs Recipe List (Paladin_Rolan) can validate the
   recipe data used by the app.
 

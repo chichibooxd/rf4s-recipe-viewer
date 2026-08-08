@@ -1,7 +1,8 @@
 import { LoadoutBuilder } from './loadout-builder.js';
-import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus } from '../models/custom-item.js';
+import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus, slotUpgradeStats } from '../models/custom-item.js';
 import { attachStatInfo } from '../utils/stat-info.js';
-import { initPlanner, getCraftRpCostForSkill, getPlannerMaxRp } from './planner.js';
+import { initPlanner, getCraftRpCostForSkill, getPlannerMaxRp, getSkillLevel } from './planner.js';
+import { tluBonus, detectCores, ELEMENTS } from '../models/craft-calculator.js';
 
 // Base effects of usable items (dishes, medicine) from the Item Use Values sheet
 const USE_COLS = [
@@ -259,6 +260,7 @@ export async function initRecipeViewer() {
         const useEffectsByItem = {};
         const cookEffectsByItem = {};
         const difficultyByItem = {};
+        const elementByItem = {};
         
         // Parse Equipment List to get stats
         const equipmentSheetId = stringToIndex['Equipment List'];
@@ -275,6 +277,7 @@ export async function initRecipeViewer() {
             const equipmentHeaders = equipmentRows[0].map(id => strings[id]);
             const itemColumnIndex = equipmentHeaders.indexOf('Item');
             const statColumnIndices = statColumns.map(col => ({ name: col, index: equipmentHeaders.indexOf(col) })).filter(c => c.index !== -1);
+            const attributeColumnIndex = equipmentHeaders.indexOf('Attribute');
             
             for (let i = 1; i < equipmentRows.length; i++) {
                 const row = equipmentRows[i];
@@ -291,6 +294,9 @@ export async function initRecipeViewer() {
                     });
                     if (Object.keys(statValues).length > 0) {
                         baseStatsByItem[itemName] = statValues;
+                    }
+                    if (attributeColumnIndex !== -1 && attributeColumnIndex < row.length && row[attributeColumnIndex]) {
+                        elementByItem[itemName] = strings[row[attributeColumnIndex]];
                     }
                 }
             }
@@ -446,7 +452,8 @@ export async function initRecipeViewer() {
                     upgradeStats: upgradeEffectsByItem[recipeName] || null,
                     useStats: useEffectsByItem[recipeName] || null,
                     cookStats: cookEffectsByItem[recipeName] || null,
-                    difficulty: difficultyByItem[recipeName] || 0
+                    difficulty: difficultyByItem[recipeName] || 0,
+                    element: elementByItem[recipeName] || null
                 });
             }
         });
@@ -484,7 +491,8 @@ export async function initRecipeViewer() {
                             upgradeStats: upgradeEffectsByItem[itemName] || null,
                             useStats: useEffectsByItem[itemName] || null,
                             cookStats: cookEffectsByItem[itemName] || null,
-                            difficulty: difficultyByItem[itemName] || 0
+                            difficulty: difficultyByItem[itemName] || 0,
+                    element: elementByItem[itemName] || null
                         });
                         knownRecipeNames.add(itemName);
                     }
@@ -507,7 +515,8 @@ export async function initRecipeViewer() {
                     upgradeStats: upgradeEffectsByItem[matName] || null,
                     useStats: useEffectsByItem[matName] || null,
                     cookStats: cookEffectsByItem[matName] || null,
-                    difficulty: difficultyByItem[matName] || 0
+                    difficulty: difficultyByItem[matName] || 0,
+                    element: elementByItem[matName] || null
                 });
                 knownRecipeNames.add(matName);
             }
@@ -528,7 +537,8 @@ export async function initRecipeViewer() {
                     upgradeStats: upgradeEffectsByItem[eqName] || null,
                     useStats: useEffectsByItem[eqName] || null,
                     cookStats: cookEffectsByItem[eqName] || null,
-                    difficulty: difficultyByItem[eqName] || 0
+                    difficulty: difficultyByItem[eqName] || 0,
+                    element: elementByItem[eqName] || null
                 });
                 knownRecipeNames.add(eqName);
             }
@@ -725,6 +735,246 @@ export async function initRecipeViewer() {
         statsContainer.appendChild(grid);
     }
 
+    // Interactive crafting planner: material levels, extra items, elemental
+    // stones, cores, Light Ore override → predicted final stats.
+    function renderCraftPlanner(item, recipe, isEquipment, isWeapon) {
+        const container = document.getElementById('craft-planner-container');
+        if (!container) return;
+        if (!isEquipment) {
+            container.hidden = true;
+            return;
+        }
+        container.hidden = false;
+        container.replaceChildren();
+
+        const details = document.createElement('details');
+        details.className = 'craft-planner';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Crafting Planner';
+        details.appendChild(summary);
+
+        const body = document.createElement('div');
+        body.className = 'craft-planner-body';
+
+        // Skill level for the craft
+        const skillRow = document.createElement('label');
+        skillRow.className = 'craft-field';
+        skillRow.appendChild(document.createTextNode(`${recipe.skill} level: `));
+        const skillInput = document.createElement('input');
+        skillInput.type = 'number';
+        skillInput.setAttribute("aria-label", `${recipe.skill} crafting level`);
+        skillInput.min = 1;
+        skillInput.max = 999;
+        skillInput.value = getSkillLevel(recipe.skill) || 1;
+        skillRow.appendChild(skillInput);
+        body.appendChild(skillRow);
+
+        // Material rows: name + level (1-10) + "Extra" checkbox (max 3)
+        const materialList = document.createElement('div');
+        materialList.className = 'craft-material-list';
+        const slotControls = [];
+        for (let i = 0; i < 6; i++) {
+            const slotValue = item.slots[i];
+            if (slotValue == null) continue;
+            const slotName = slotValue instanceof CustomItem ? slotValue.baseRecipe.name : slotValue;
+
+            const row = document.createElement('div');
+            row.className = 'craft-material-row';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = slotName;
+            const levelInput = document.createElement('input');
+            levelInput.type = 'number';
+            levelInput.min = 1;
+            levelInput.max = 10;
+            levelInput.value = 1;
+            levelInput.setAttribute('aria-label', `${slotName} level`);
+            const extraLabel = document.createElement('label');
+            const extraCheckbox = document.createElement('input');
+            extraCheckbox.type = 'checkbox';
+            extraCheckbox.checked = item.inherited[i];
+            extraCheckbox.setAttribute('aria-label', `Use ${slotName} as extra item`);
+            extraLabel.appendChild(extraCheckbox);
+            extraLabel.appendChild(document.createTextNode(' Extra'));
+            row.appendChild(nameSpan);
+            row.appendChild(levelInput);
+            row.appendChild(extraLabel);
+            materialList.appendChild(row);
+            slotControls.push({ levelInput, extraCheckbox });
+        }
+        body.appendChild(materialList);
+
+        // Elemental stone
+        const elementRow = document.createElement('label');
+        elementRow.className = 'craft-field';
+        elementRow.appendChild(document.createTextNode('Element (stone): '));
+        const elementSelect = document.createElement('select');
+        elementSelect.setAttribute('aria-label', 'Element stone');
+        ['None', ...ELEMENTS].forEach(element => {
+            const optionElement = document.createElement('option');
+            optionElement.value = element;
+            optionElement.textContent = element;
+            elementSelect.appendChild(optionElement);
+        });
+        elementSelect.value = recipe.element || 'None';
+        elementRow.appendChild(elementSelect);
+        body.appendChild(elementRow);
+
+        // Light Ore + override
+        const lightOreRow = document.createElement('label');
+        lightOreRow.className = 'craft-field';
+        const lightOreCheckbox = document.createElement('input');
+        lightOreCheckbox.type = 'checkbox';
+        lightOreCheckbox.setAttribute('aria-label', 'Light Ore');
+        lightOreRow.appendChild(lightOreCheckbox);
+        lightOreRow.appendChild(document.createTextNode(' Light Ore (cross-category override)'));
+        body.appendChild(lightOreRow);
+
+        const overrideRow = document.createElement('label');
+        overrideRow.className = 'craft-field';
+        overrideRow.appendChild(document.createTextNode('Override base stats with: '));
+        const overrideSelect = document.createElement('select');
+        overrideSelect.setAttribute('aria-label', 'Override base stats');
+        body.appendChild(overrideRow);
+        overrideRow.appendChild(overrideSelect);
+
+        function populateOverrideOptions() {
+            overrideSelect.replaceChildren();
+            const noneOption = document.createElement('option');
+            noneOption.value = '';
+            noneOption.textContent = 'None (recipe base stats)';
+            overrideSelect.appendChild(noneOption);
+
+            const useLightOre = lightOreCheckbox.checked && isWeapon;
+            const candidates = gameData.recipes.filter(candidate =>
+                candidate.id !== recipe.id &&
+                (useLightOre
+                    ? loadoutBuilder.weaponSubtypes.includes(candidate.subtype)
+                    : candidate.subtype === recipe.subtype) &&
+                candidate.baseStats && Object.keys(candidate.baseStats).length > 0);
+
+            candidates.sort((a, b) => a.level - b.level);
+            candidates.forEach(candidate => {
+                const optionElement = document.createElement('option');
+                optionElement.value = candidate.id;
+                optionElement.textContent = `${candidate.name} (${candidate.subtype})`;
+                overrideSelect.appendChild(optionElement);
+            });
+        }
+        populateOverrideOptions();
+
+        // Results
+        const resultsGrid = document.createElement('div');
+        resultsGrid.className = 'stats-grid craft-planner-results';
+        body.appendChild(resultsGrid);
+        details.appendChild(body);
+        container.appendChild(details);
+
+        const TLU_STAT_NAMES = { atk: 'ATK', matk: 'MATK', def: 'DEF', mdef: 'MDEF' };
+
+        function renderStatBox(statName, statValue) {
+            const statBox = document.createElement('div');
+            statBox.className = 'stat-box';
+            const nameLabel = document.createElement('strong');
+            nameLabel.textContent = `${statName}:`;
+            statBox.appendChild(nameLabel);
+            statBox.appendChild(document.createTextNode(` ${statValue}`));
+            attachStatInfo(statBox, statName, 'general');
+            resultsGrid.appendChild(statBox);
+        }
+
+        function renderResultNote(text) {
+            const note = document.createElement('div');
+            note.className = 'stat-note';
+            note.textContent = text;
+            resultsGrid.appendChild(note);
+        }
+
+        function recompute() {
+            resultsGrid.replaceChildren();
+
+            const skillLevel = parseInt(skillInput.value, 10) || 1;
+            const levels = slotControls.map(control => parseInt(control.levelInput.value, 10) || 1);
+            const extraFlags = slotControls.map(control => control.extraCheckbox.checked);
+
+            // Total Level Used from the entered material levels
+            const totalLevelUsed = levels.reduce((sum, level) => sum + level, 0);
+            const tluBonusStats = tluBonus(totalLevelUsed, isWeapon);
+
+            // Total Difficulty Used from the data (unchanged by levels)
+            const totalDifficulty = materialDifficulty(item, recipeByName);
+            const tduBonusValue = tduBonus(totalDifficulty, isWeapon);
+            const tduBonusStat = tduBonusValue > 0 ? { [isWeapon ? 'ATK' : 'DEF']: tduBonusValue } : null;
+
+            // Inherited effects: checked extras, max 3 in-game
+            const inheritedEffectValues = {};
+            let extraCount = 0;
+            slotControls.forEach((control, i) => {
+                if (!extraFlags[i] || extraCount >= 3) return;
+                const contributedStats = slotUpgradeStats(item.slots[i], recipeByName);
+                if (contributedStats) {
+                    Object.entries(contributedStats).forEach(([statName, statValue]) => {
+                        inheritedEffectValues[statName] = (inheritedEffectValues[statName] || 0) + statValue;
+                    });
+                }
+                extraCount++;
+            });
+
+            // Override base stats
+            const overrideRecipe = overrideSelect.value ? recipeById.get(overrideSelect.value) : null;
+            const baseStats = overrideRecipe ? overrideRecipe.baseStats : recipe.baseStats;
+            const overrideElement = overrideRecipe && overrideRecipe.element;
+
+            // Element: elemental stone overrides, otherwise the item's element
+            const element = elementSelect.value === 'None'
+                ? (overrideElement || recipe.element || null)
+                : elementSelect.value;
+
+            // Cores among the materials
+            const coreDetection = detectCores(slotControls.map((control, i) =>
+                item.slots[i] instanceof CustomItem ? item.slots[i].baseRecipe.name : item.slots[i]));
+
+            const totalStats = sumStats(baseStats, inheritedEffectValues, tluBonusStats, tduBonusStat);
+
+            renderStatBox('TLU', totalLevelUsed);
+            Object.entries(tluBonusStats).forEach(([statName, statValue]) => renderStatBox(`TLU ${TLU_STAT_NAMES[statName] || statName}`, `+${statValue}`));
+            if (tduBonusValue > 0) renderStatBox(`TDU ${isWeapon ? 'ATK' : 'DEF'}`, `+${tduBonusValue}`);
+            if (extraCount > 0) {
+                Object.entries(inheritedEffectValues).forEach(([statName, statValue]) => renderStatBox(`Extra ${statName}`, `+${statValue}`));
+            }
+            renderStatBox('Total Stats', Object.entries(totalStats)
+                .map(([statName, statValue]) => `${TLU_STAT_NAMES[statName] || statName} ${statValue}`).join(', ') || '—');
+
+            if (element) renderResultNote(`Element: ${element}${elementSelect.value !== 'None' ? ' (elemental stone)' : ''}`);
+            if (coreDetection.count > 0) {
+                renderResultNote(coreDetection.allFour
+                    ? 'All 4 cores present — +10% resistance to non-elemental damage.'
+                    : `${coreDetection.count}/4 cores present — all four grant +10% non-elemental resistance.`);
+            }
+            if ((skillLevel < 50) && (Object.keys(tluBonusStats).length > 0 || tduBonusValue > 0)) {
+                renderResultNote(`TLU/TDU bonuses apply at skill ≥ 50 — current level ${skillLevel}.`);
+            }
+            const checkedExtras = extraFlags.filter(Boolean).length;
+            if (checkedExtras > 3) {
+                renderResultNote('In-game only 3 extra items impart their effects — extra slots beyond 3 are not counted.');
+            }
+            const rpCost = getCraftRpCostForSkill(recipe.skill);
+            if (rpCost !== null) {
+                renderResultNote(`Crafting costs ${rpCost} RP (planner max RP ${getPlannerMaxRp()}).`);
+            }
+        }
+
+        const allInputs = [skillInput, elementSelect, lightOreCheckbox, overrideSelect,
+            ...slotControls.flatMap(control => [control.levelInput, control.extraCheckbox])];
+        allInputs.forEach(input => {
+            input.addEventListener('change', () => {
+                if (input === lightOreCheckbox) populateOverrideOptions();
+                recompute();
+            });
+        });
+
+        recompute();
+    }
+
     // Render a stat grid section into the stats container
     function renderStatSection(heading, statValues, extraClass = '', context = 'general') {
         if (!statValues || Object.keys(statValues).length === 0) return;
@@ -828,6 +1078,16 @@ export async function initRecipeViewer() {
         levelBox.appendChild(document.createTextNode(` ${recipe.level}`));
         baseStatsGrid.appendChild(levelBox);
 
+        if (recipe.element) {
+            const elementBox = document.createElement('div');
+            elementBox.className = 'stat-box';
+            const elementStrong = document.createElement('strong');
+            elementStrong.textContent = 'Element:';
+            elementBox.appendChild(elementStrong);
+            elementBox.appendChild(document.createTextNode(` ${recipe.element}`));
+            baseStatsGrid.appendChild(elementBox);
+        }
+
         statsContainer.appendChild(baseStatsGrid);
 
         if (isEquipment) {
@@ -837,6 +1097,7 @@ export async function initRecipeViewer() {
         }
 
         renderCraftCost(recipe);
+        renderCraftPlanner(item, recipe, isEquipment, isWeapon);
 
         if (loadoutBuilder && isEquipment) {
             equipBtn.style.display = 'inline-block';

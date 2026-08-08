@@ -24,7 +24,8 @@
 │   │   ├── loadout-builder.js # Loadout Editor: slots, totals, share/import modal
 │   │   └── planner.js         # Character Planner: skill levels → HP/RP/STR/INT/VIT, craft RP costs
 │   ├── models/
-│   │   └── custom-item.js     # Model for custom crafting inheritance trees + stat helpers
+│   │   ├── custom-item.js     # Model for custom crafting inheritance trees + stat helpers
+│   │   └── craft-calculator.js # TLU tier bonuses, elemental stones, core detection
 │   └── utils/
 │       └── stat-info.js       # Stat/effect glossary + click-to-explore tooltip
 │
@@ -90,4 +91,11 @@ The `data.json` format is produced by an external conversion script (see `specs.
    (craft RP costs). Stat math follows clepe's Stats Guide: HP yields double every 50 skill
    levels, STR/INT/VIT every 300, RP caps at skill 100; per-skill contributions floor
    individually. Craft cost = flat RP + % of max RP.
-9. **Service Worker:** network-first with cache fallback; cache version `rf4-recipes-v16`.
+9. **Crafting Planner** (on equipment recipe details): interactive prediction with
+   material level inputs (1–10), Extra/inheritance checkboxes (max 3), skill level,
+   elemental-stone element, core detection, and Light Ore / same-category **override**
+   of base stats. Computes TLU (user-entered levels) + TDU tier bonuses and totals;
+   TLU/TDU flagged below skill 50. Base weapon elements come from the `Attribute`
+   column of the `Equipment List` sheet. `js/models/craft-calculator.js` holds the
+   TLU tiers, elemental-stone constants, and core detection.
+10. **Service Worker:** network-first with cache fallback; cache version `rf4-recipes-v17`.

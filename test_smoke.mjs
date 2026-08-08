@@ -167,7 +167,8 @@ const IDS = ['input-grid', 'recipe-list', 'detail-grid', 'detail-title', 'back-b
     'pick-banner', 'pick-banner-text', 'pick-cancel-btn', 'loadout-slots', 'loadout-stats-grid',
     'share-loadout-btn', 'import-loadout-btn', 'code-modal', 'code-textarea', 'code-modal-status',
     'code-modal-title', 'code-copy-btn', 'code-import-btn', 'code-close-btn',
-    'planner-skills', 'planner-stats', 'planner-costs', 'planner-level', 'planner-notes'];
+    'planner-skills', 'planner-stats', 'planner-costs', 'planner-level', 'planner-notes',
+    'craft-planner-container'];
 IDS.forEach(id => { if (!byId[id]) byId[id] = makeEl('div'); });
 byId['pick-banner'].hidden = true; // ui.html starts with hidden attribute
 byId['results-status'].hidden = true;
@@ -352,9 +353,100 @@ check('api exposes isPickMode', typeof api.isPickMode === 'function');
         check('loadout shows 37 stat boxes', byId['loadout-stats-grid'].children.filter(c => c.className.includes('stat-box')).length === 37);
         // Loadout persists to localStorage
         check('loadout persisted to localStorage', !!JSON.parse(globalThis.localStorage.getItem('rf4-loadout') || 'null').Weapon);
+        // Inherited info shown on the loadout slot
+        const slotText = byId['loadout-slots'].children.map(c => c.textContent).join(' ');
+        check('loadout slot shows inherited item', slotText.includes('Inherits: Iron'));
         console.log('    Steel Edge totals (with Iron inherited):', boxes.replace(/\s+/g, ' ').slice(0, 140));
     } else {
         check('Steel Edge found for inheritance', false);
+    }
+}
+
+// --- 6e. Crafting Planner: TLU, element stones, cores, override ---
+{
+    const findInput = (root, label) => {
+        for (const child of root.children) {
+            if (child.getAttribute && child.getAttribute('aria-label') === label) return child;
+            if (child.children) {
+                const found = findInput(child, label);
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+
+    skill.value = 'Forging';
+    fire(skill, 'change', { target: skill });
+    subtype.value = 'Dual Blade';
+    fire(subtype, 'change', { target: subtype });
+    const target = byId['recipe-list'].children.find(li => li.textContent.includes('Steel Edge'));
+    fire(byId['recipe-list'], 'click', { target });
+
+    const panel = byId['craft-planner-container'].children[0];
+    check('craft planner panel exists', !!panel && panel.className.includes('craft-planner') &&
+        panel.children[0].textContent === 'Crafting Planner');
+
+    const skillInput = findInput(panel, 'Forging crafting level');
+    const elementSelect = findInput(panel, 'Element stone');
+    const lightOreCheckbox = findInput(panel, 'Light Ore');
+    const overrideSelect = findInput(panel, 'Override base stats');
+    check('planner inputs present', !!skillInput && !!elementSelect && !!lightOreCheckbox && !!overrideSelect);
+
+    const resultsText = () => byId['craft-planner-container'].children[0].children[1]
+        .children.find(c => c.className.includes('craft-planner-results'))
+        .children.map(c => c.textContent).join(' ');
+
+    // TLU: 3 materials at level 10 = 30 → weapon tier 1 (+10 ATK, +5 MATK)
+    const levelInputs = [];
+    const collect = (root) => {
+        for (const child of root.children) {
+            if (child.getAttribute && child.getAttribute('aria-label') && child.getAttribute('aria-label').endsWith(' level') &&
+                !child.getAttribute('aria-label').includes('crafting level')) levelInputs.push(child);
+            if (child.children) collect(child);
+        }
+    };
+    collect(panel);
+    check('material level inputs present', levelInputs.length === 3);
+    levelInputs.forEach(input => { input.value = '10'; fire(input, 'change', { target: input }); });
+    const tluText = resultsText();
+    check('TLU 30 grants +10 ATK/+5 MATK', tluText.includes('TLU ATK: +10') && tluText.includes('TLU MATK: +5'));
+    check('skill < 50 warning shown', tluText.includes('apply at skill ≥ 50'));
+    check('TLU value shown', tluText.includes('TLU: 30'));
+
+    // skill ≥ 50 removes the warning
+    skillInput.value = '50';
+    fire(skillInput, 'change', { target: skillInput });
+    check('skill ≥ 50 removes warning', !resultsText().includes('apply at skill ≥ 50'));
+
+    // elemental stone
+    elementSelect.value = 'Fire';
+    fire(elementSelect, 'change', { target: elementSelect });
+    check('elemental stone note shown', resultsText().includes('Element: Fire (elemental stone)'));
+
+    // override changes the totals
+    const before = resultsText();
+    const overrideOptions = overrideSelect.children.filter(o => o.value);
+    check('override options available', overrideOptions.length > 0);
+    if (overrideOptions.length > 0) {
+        overrideSelect.value = overrideOptions[0].value;
+        fire(overrideSelect, 'change', { target: overrideSelect });
+        check('override changes total stats', resultsText() !== before);
+    }
+}
+
+// --- 6f. Elemental weapon shows its element on the detail ---
+{
+    skill.value = 'Forging';
+    fire(skill, 'change', { target: skill });
+    subtype.value = 'All';
+    fire(subtype, 'change', { target: subtype });
+    const target = byId['recipe-list'].children.find(li => li.textContent.includes('Wind Sword'));
+    if (target) {
+        fire(byId['recipe-list'], 'click', { target });
+        const text = byId['stats-container'].children.map(c => c.textContent).join(' ');
+        check('elemental weapon shows Element: Wind', text.includes('Element: Wind'));
+    } else {
+        check('Wind Sword found', false);
     }
 }
 

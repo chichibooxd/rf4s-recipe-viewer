@@ -118,6 +118,32 @@ export class LoadoutBuilder {
                 itemNameEl.textContent = item instanceof CustomItem ? item.baseRecipe.name : item.name;
                 slotElement.appendChild(itemNameEl);
 
+                // Disseminate the item's inheritance and element at a glance
+                const materialInfo = [];
+                const inheritedNames = [];
+                if (item instanceof CustomItem) {
+                    item.slots.forEach((slotValue, i) => {
+                        if (slotValue instanceof CustomItem) {
+                            inheritedNames.push(slotValue.baseRecipe.name);
+                        } else if (typeof slotValue === 'string' && item.inherited[i]) {
+                            inheritedNames.push(slotValue);
+                        }
+                    });
+                }
+                if (inheritedNames.length > 0) {
+                    materialInfo.push(`Inherits: ${inheritedNames.join(', ')}`);
+                }
+                const baseRecipe = item instanceof CustomItem ? item.baseRecipe : item;
+                if (baseRecipe.element) {
+                    materialInfo.push(`Element: ${baseRecipe.element}`);
+                }
+                if (materialInfo.length > 0) {
+                    const infoEl = document.createElement('div');
+                    infoEl.className = 'slot-upgrade-info';
+                    infoEl.textContent = materialInfo.join(' · ');
+                    slotElement.appendChild(infoEl);
+                }
+
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'remove-btn';
                 removeBtn.textContent = 'X';

@@ -149,9 +149,15 @@ const SKILL_ACTION = {
 // Shared state so the recipe detail can show craft costs from the planner
 let lastComputedStats = null;
 let craftCostsByAction = {};
+let lastSkillLevels = null;
 
 export function getPlannerMaxRp() {
     return lastComputedStats ? lastComputedStats.rp : null;
+}
+
+// Current skill level of the given skill (0 if not set)
+export function getSkillLevel(skillName) {
+    return lastSkillLevels ? (lastSkillLevels[skillName] || 0) : 0;
 }
 
 // RP cost to craft the given skill with the planner's current max RP
@@ -228,6 +234,7 @@ export function initPlanner(rawData) {
         const skillLevels = skillStats.map(skill => parseInt(skillInputs.get(skill.name).value, 10) || 0);
         const computedStats = computeCharacterStats(level, skillLevels, levelStats, skillStats);
         lastComputedStats = computedStats;
+        lastSkillLevels = Object.fromEntries(skillStats.map((skill, i) => [skill.name, skillLevels[i]]));
 
         statsGrid.replaceChildren();
         const statEntries = [

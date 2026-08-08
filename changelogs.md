@@ -4,6 +4,34 @@ All notable changes to RF4 Recipe Viewer are documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to a cache-bumped version scheme (`rf4-recipes-vN` in `sw.js`).
 
+## [v17] - 2026-08-08
+
+### Added
+- **Crafting Planner panel** on equipment recipe details: material level inputs (1–10),
+  "Extra" checkboxes (max 3 inherited items), skill level, and live prediction of
+  Total Level Used (TLU) bonus (+10…+700 ATK / +5…+650 MATK weapons, +6…+350 DEF /
+  +5…+350 M.DEF gear), TDU bonus, inherited effects, and totals. TLU/TDU bonuses flagged
+  when the skill is below 50.
+- **Elemental stones / elements:** weapons show their base element (from the data's
+  `Attribute` column); the planner lets you apply an elemental-stone element (Fire/Water/
+  Earth/Wind/Light/Dark) and shows the result.
+- **Cores:** recipes using Green/Blue/Red/Yellow Cores are detected and show the
+  "+10% resistance to non-elemental damage (all 4 cores)" bonus progress.
+- **Overwrite / override planning:** the planner can replace the recipe's base stats with
+  a same-category item's base stats (in-game overwrite rule), or any weapon via Light Ore
+  (cross-category override).
+- Loadout slots now show inherited items and the item's element at a glance
+  ("Inherits: … · Element: …").
+- `js/models/craft-calculator.js` — pure TLU/cores/element helpers.
+
+### Note
+- Craft success percentage and XP gained per craft remain pending formula research
+  (see `plan/all-in-one-roadmap.md`). TLU is now computable via user-entered material
+  levels (per-item levels are still absent from the dump).
+- Service worker cache bumped `rf4-recipes-v16` → `rf4-recipes-v17` (new module cached).
+
+---
+
 ## [v16] - 2026-08-08
 
 ### Added
