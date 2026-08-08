@@ -46,3 +46,30 @@ export class CustomItem {
         return customItem;
     }
 }
+
+// Stats a slot contributes when used as a crafting material.
+// A plain material contributes its own upgrade stats; an inherited
+// crafted item contributes its upgrade stats (its own materials do not
+// carry over once the item is crafted).
+export function slotUpgradeStats(slot, recipeByName) {
+    if (slot instanceof CustomItem) {
+        return slot.baseRecipe.upgradeStats || null;
+    }
+    if (typeof slot === 'string') {
+        const recipe = recipeByName ? recipeByName.get(slot) : null;
+        return (recipe && recipe.upgradeStats) || null;
+    }
+    return null;
+}
+
+// Sum numeric stat maps into a single stat map.
+export function sumStats(...sources) {
+    const totals = {};
+    sources.forEach(source => {
+        if (!source) return;
+        Object.entries(source).forEach(([stat, val]) => {
+            totals[stat] = (totals[stat] || 0) + val;
+        });
+    });
+    return totals;
+}

@@ -1,4 +1,4 @@
-import assert from 'assert';
+import assert from 'node:assert';
 import { CustomItem } from './js/models/custom-item.js';
 
 function runTests() {

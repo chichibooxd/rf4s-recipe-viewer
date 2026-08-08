@@ -1,5 +1,5 @@
 import { LoadoutBuilder } from './loadout-builder.js';
-import { CustomItem } from '../models/custom-item.js';
+import { CustomItem, slotUpgradeStats, sumStats } from '../models/custom-item.js';
 
 export async function initRecipeViewer() {
     let appData = { materials: [], recipes: [] };
@@ -8,12 +8,17 @@ export async function initRecipeViewer() {
     let selectedSubtype = "All";
     let loadoutBuilder = null;
     let activeTargetSlot = null;
+    let currentDetailItem = null;
+    let pendingDetailItem = null;
+    let recipeById = new Map();
+    let recipeByName = new Map();
+    let currentRoute = null;
+    let previousRoute = null;
+    let navigatedSinceLoad = false;
 
     const inputGrid = document.getElementById('input-grid');
     const recipeList = document.getElementById('recipe-list');
     const detailGrid = document.getElementById('detail-grid');
-    const searchScreen = document.getElementById('search-screen');
-    const recipeScreen = document.getElementById('recipe-screen');
     const detailTitle = document.getElementById('detail-title');
     const backBtn = document.getElementById('back-btn');
     const resetBtn = document.getElementById('reset-btn');
@@ -21,6 +26,9 @@ export async function initRecipeViewer() {
     const skillFilter = document.getElementById('skill-filter');
     const subtypeFilter = document.getElementById('subtype-filter');
     const statsContainer = document.getElementById('stats-container');
+    const resultsStatus = document.getElementById('results-status');
+    const pickBanner = document.getElementById('pick-banner');
+    const pickBannerText = document.getElementById('pick-banner-text');
 
     try {
         const res = await fetch('data/data.json');
@@ -28,30 +36,32 @@ export async function initRecipeViewer() {
         const rawData = await res.json();
         
         appData = processData(rawData);
-        loadoutBuilder = new LoadoutBuilder(appData, 
+        recipeById = new Map(appData.recipes.map(r => [r.id, r]));
+        recipeByName = new Map(appData.recipes.map(r => [r.name, r]));
+
+        loadoutBuilder = new LoadoutBuilder(appData,
             (slotName) => {
                 // Empty slot clicked: navigate to search, filter by subtype
-                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-                searchScreen.classList.add('active');
-                
-                // Map slot to subtype/skill if possible
+                setPickMode(null);
                 if (slotName === 'Weapon') {
                     skillFilter.value = 'Forging';
                     selectedSkill = 'Forging';
+                    selectedSubtype = 'All';
                 } else {
                     skillFilter.value = 'Crafting';
                     selectedSkill = 'Crafting';
+                    selectedSubtype = slotName;
                 }
-                
-                selectedSubtype = slotName === 'Weapon' ? 'Short Sword' : slotName; // Default for weapons
                 updateSubtypeDropdown();
                 updateMaterialDropdowns();
                 filterRecipes();
+                navigateTo('#/search');
             },
             (item) => {
                 // Filled slot clicked: show recipe details
-                showRecipeDetail(item);
-            }
+                openDetail(item);
+            },
+            (path) => navigateTo(path)
         );
 
         // Populate Skill Filter
@@ -82,10 +92,132 @@ export async function initRecipeViewer() {
         updateSubtypeDropdown();
         buildSearchGrid();
         buildDetailGrid();
+        filterRecipes();
+
+        document.getElementById('pick-cancel-btn').addEventListener('click', () => setPickMode(null));
+        backBtn.onclick = () => {
+            if (navigatedSinceLoad) {
+                history.back();
+            } else {
+                // App was loaded directly on a detail route: nothing to go back to
+                navigateTo('#/search', { replace: true });
+            }
+        };
+
+        resetBtn.onclick = () => {
+            setPickMode(null);
+            selectedInputs = ["", "", "", "", "", ""];
+            skillFilter.value = "All";
+            selectedSkill = "All";
+            selectedSubtype = "All";
+            updateSubtypeDropdown();
+            updateMaterialDropdowns();
+            filterRecipes();
+        };
+
+        window.addEventListener('hashchange', renderRoute);
+        if (!location.hash) {
+            history.replaceState(null, '', '#/search');
+        }
+        renderRoute();
     } catch (error) {
         console.error("Failed to load database:", error);
         alert("Failed to load recipe database. Please refresh.");
     }
+
+    // --- Routing (single source of truth for screen visibility) ---
+
+    function parseHash() {
+        const h = location.hash;
+        if (h.startsWith('#/recipe/')) {
+            return { screen: 'recipe', id: decodeURIComponent(h.slice('#/recipe/'.length)) };
+        }
+        if (h === '#/loadout') return { screen: 'loadout' };
+        return { screen: 'search' };
+    }
+
+    function navigateTo(path, { replace = false } = {}) {
+        if (location.hash === path) {
+            renderRoute();
+            return;
+        }
+        navigatedSinceLoad = true;
+        if (replace) {
+            history.replaceState(null, '', path);
+            renderRoute();
+        } else {
+            location.hash = path;
+        }
+    }
+
+    function renderRoute() {
+        const route = parseHash();
+        previousRoute = currentRoute;
+        currentRoute = route;
+
+        // Pick mode never survives navigation away from the search screen
+        if (route.screen !== 'search') {
+            setPickMode(null);
+        }
+
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+
+        if (route.screen === 'recipe') {
+            const item = resolveDetailItem(route.id);
+            if (!item) {
+                navigateTo('#/search', { replace: true });
+                return;
+            }
+            currentDetailItem = item;
+            document.getElementById('recipe-screen').classList.add('active');
+            showRecipeDetail(item);
+        } else if (route.screen === 'loadout') {
+            document.getElementById('loadout-screen').classList.add('active');
+            loadoutBuilder.refresh();
+        } else {
+            document.getElementById('search-screen').classList.add('active');
+        }
+
+        window.dispatchEvent(new CustomEvent('routechange', { detail: route.screen }));
+    }
+
+    // Opens the detail view for the given CustomItem. The item itself is
+    // carried through navigation so slot edits (inheritance) survive the
+    // pick flow and mutate the original object (e.g. an equipped item).
+    function openDetail(item) {
+        pendingDetailItem = item;
+        navigateTo('#/recipe/' + encodeURIComponent(item.baseRecipe.id));
+    }
+
+    function resolveDetailItem(id) {
+        const recipe = recipeById.get(id);
+        if (!recipe) return null;
+        if (pendingDetailItem && pendingDetailItem.baseRecipe.id === id) {
+            const item = pendingDetailItem;
+            pendingDetailItem = null;
+            return item;
+        }
+        // Same-item back/forward navigation keeps the in-memory instance
+        if (currentDetailItem && currentDetailItem.baseRecipe.id === id &&
+            previousRoute && previousRoute.screen === 'recipe' && previousRoute.id === id) {
+            return currentDetailItem;
+        }
+        return new CustomItem(recipe);
+    }
+
+    // --- Inheritance pick mode ---
+
+    function setPickMode(target) {
+        activeTargetSlot = target;
+        if (target) {
+            pickBannerText.textContent = `Select an item to inherit into material slot ${target.slotIndex + 1}`;
+            pickBanner.hidden = false;
+        } else {
+            pickBanner.hidden = true;
+        }
+    }
+
+    // --- Data processing ---
 
     function processData(rawData) {
         const strings = rawData.strings;
@@ -425,7 +557,12 @@ export async function initRecipeViewer() {
         recipeList.replaceChildren();
         const activeFilters = selectedInputs.filter(val => val !== "");
         
-        if (activeFilters.length === 0 && selectedSkill === "All" && selectedSubtype === "All") return;
+        const noFilters = activeFilters.length === 0 && selectedSkill === "All" && selectedSubtype === "All";
+        if (noFilters) {
+            resultsStatus.textContent = 'Pick a skill, subtype, or materials to search';
+            resultsStatus.hidden = false;
+            return;
+        }
 
         const userCounts = {};
         activeFilters.forEach(item => { userCounts[item] = (userCounts[item] || 0) + 1; });
@@ -446,32 +583,42 @@ export async function initRecipeViewer() {
 
         filtered.sort((a, b) => a.level - b.level);
 
+        if (filtered.length === 0) {
+            resultsStatus.textContent = 'No recipes match your filters';
+            resultsStatus.hidden = false;
+            return;
+        }
+        resultsStatus.hidden = true;
+
         const fragment = document.createDocumentFragment();
         filtered.forEach(recipe => {
             const li = document.createElement('li');
             li.className = 'recipe-item';
             li.dataset.id = recipe.id;
-            li.textContent = `${recipe.name} - ${recipe.subtype !== 'Unknown' ? recipe.subtype : recipe.skill} Lv.${recipe.level}`;
+            const typeLabel = recipe.skill === 'Ingredient'
+                ? (recipe.subtype !== 'Unknown' ? recipe.subtype : 'Ingredient')
+                : (recipe.subtype !== 'Unknown' ? `${recipe.subtype} Lv.${recipe.level}` : `${recipe.skill} Lv.${recipe.level}`);
+            li.textContent = `${recipe.name} — ${typeLabel}`;
             fragment.appendChild(li);
         });
         recipeList.appendChild(fragment);
     }
 
     recipeList.addEventListener('click', (e) => {
-        const item = e.target.closest('.recipe-item');
-        if (!item) return;
-        const recipe = appData.recipes.find(r => r.id === item.dataset.id);
+        const el = e.target.closest('.recipe-item');
+        if (!el) return;
+        const recipe = recipeById.get(el.dataset.id);
         if (!recipe) return;
 
         if (activeTargetSlot) {
             // Inheritance: Add item to target slot
             activeTargetSlot.customItem.setSlot(activeTargetSlot.slotIndex, new CustomItem(recipe));
             const currentItemToView = activeTargetSlot.customItem;
-            activeTargetSlot = null; // clear state
-            showRecipeDetail(currentItemToView);
+            setPickMode(null); // clear state
+            openDetail(currentItemToView);
         } else {
             // Normal view
-            showRecipeDetail(new CustomItem(recipe));
+            openDetail(new CustomItem(recipe));
         }
     });
 
@@ -498,15 +645,20 @@ export async function initRecipeViewer() {
                 } else {
                     slots[i].textContent = slotVal;
                     slots[i].classList.add('filled-base');
+                    // Drill down into the material's own recipe if it has one
+                    const matRecipe = recipeByName.get(slotVal);
+                    if (matRecipe) {
+                        slots[i].classList.add('clickable');
+                        slots[i].title = 'View material details';
+                        slots[i].onclick = () => openDetail(new CustomItem(matRecipe));
+                    }
                 }
             } else {
                 slots[i].textContent = 'Empty (+ Add Item)';
                 slots[i].classList.add('empty-fillable');
                 slots[i].onclick = () => {
-                    activeTargetSlot = { customItem: item, slotIndex: i };
-                    // Navigate to search screen
-                    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-                    searchScreen.classList.add('active');
+                    setPickMode({ customItem: item, slotIndex: i });
+                    navigateTo('#/search', { replace: true });
                 };
             }
         }
@@ -535,6 +687,10 @@ export async function initRecipeViewer() {
 
         statsContainer.appendChild(baseStatsGrid);
 
+        // Stats contributed by the slot materials (base materials and inheritance)
+        const materialStats = sumStats(...item.slots.map(slot => slotUpgradeStats(slot, recipeByName)));
+        const totalStats = sumStats(recipe.baseStats, materialStats);
+
         if (recipe.baseStats && Object.keys(recipe.baseStats).length > 0) {
             const statsHeading = document.createElement('h3');
             statsHeading.textContent = 'Base Combat Stats';
@@ -557,6 +713,53 @@ export async function initRecipeViewer() {
             }
             statsGrid.appendChild(fragment);
             statsContainer.appendChild(statsGrid);
+        }
+
+        if (Object.keys(materialStats).length > 0) {
+            const statsHeading = document.createElement('h3');
+            statsHeading.textContent = 'Material Stats';
+            statsContainer.appendChild(statsHeading);
+            
+            const statsGrid = document.createElement('div');
+            statsGrid.className = 'stats-grid';
+            
+            const fragment = document.createDocumentFragment();
+            for (const [statName, statValue] of Object.entries(materialStats)) {
+                const statBox = document.createElement('div');
+                statBox.className = 'stat-box';
+                
+                const strongEl = document.createElement('strong');
+                strongEl.textContent = `${statName}:`;
+                
+                statBox.appendChild(strongEl);
+                statBox.appendChild(document.createTextNode(` ${statValue}`));
+                fragment.appendChild(statBox);
+            }
+            statsGrid.appendChild(fragment);
+            statsContainer.appendChild(statsGrid);
+
+            const totalHeading = document.createElement('h3');
+            totalHeading.textContent = 'Total Stats';
+            statsContainer.appendChild(totalHeading);
+            
+            const totalGrid = document.createElement('div');
+            totalGrid.className = 'stats-grid';
+            
+            const totalFragment = document.createDocumentFragment();
+            for (const [statName, statValue] of Object.entries(totalStats)) {
+                const statBox = document.createElement('div');
+                statBox.className = 'stat-box';
+                statBox.classList.add('stat-total');
+                
+                const strongEl = document.createElement('strong');
+                strongEl.textContent = `${statName}:`;
+                
+                statBox.appendChild(strongEl);
+                statBox.appendChild(document.createTextNode(` ${statValue}`));
+                totalFragment.appendChild(statBox);
+            }
+            totalGrid.appendChild(totalFragment);
+            statsContainer.appendChild(totalGrid);
         }
 
         if (recipe.upgradeStats && Object.keys(recipe.upgradeStats).length > 0) {
@@ -593,24 +796,13 @@ export async function initRecipeViewer() {
         } else {
             equipBtn.style.display = 'none';
         }
-        
-        searchScreen.classList.remove('active');
-        recipeScreen.classList.add('active');
     }
 
-    backBtn.onclick = () => {
-        recipeScreen.classList.remove('active');
-        searchScreen.classList.add('active');
-    };
-
-    resetBtn.onclick = () => {
-        activeTargetSlot = null;
-        selectedInputs = ["", "", "", "", "", ""];
-        skillFilter.value = "All";
-        selectedSkill = "All";
-        selectedSubtype = "All";
-        updateSubtypeDropdown();
-        updateMaterialDropdowns();
-        filterRecipes();
+    return {
+        getDetailItem: () => currentDetailItem,
+        resetFilters: () => resetBtn.onclick(),
+        refreshLoadout: () => loadoutBuilder.refresh(),
+        isPickMode: () => !!activeTargetSlot,
+        cancelPickMode: () => setPickMode(null)
     };
 }

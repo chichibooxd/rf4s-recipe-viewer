@@ -2,50 +2,60 @@
     <header>
         <h2>Recipe Search</h2>
         <div>
-            <button id="reset-btn">Clear</button>
-            <button id="toggle-nav-search-btn">☰</button>
+            <button id="reset-btn" type="button">Clear</button>
+            <button id="toggle-nav-search-btn" type="button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false">☰</button>
         </div>
     </header>
 
     <div class="filter-bar">
-        <select id="skill-filter">
+        <select id="skill-filter" aria-label="Filter by skill">
             <option value="All">All Skills</option>
         </select>
-        <select id="subtype-filter">
+        <select id="subtype-filter" aria-label="Filter by subtype">
             <option value="All">All Subtypes</option>
         </select>
     </div>
-    
-    <div class="matrix-container">
-        <div class="grid-2x3" id="input-grid"></div>
+
+    <div id="pick-banner" class="pick-banner" hidden>
+        <span id="pick-banner-text"></span>
+        <button id="pick-cancel-btn" type="button">Cancel</button>
     </div>
 
-    <div id="results-container">
+    <div class="matrix-container">
+        <p class="grid-hint">Recipes must contain all selected materials</p>
+        <div class="grid-2x3" id="input-grid" role="group" aria-label="Material filter grid"></div>
+    </div>
+
+    <div id="results-container" aria-live="polite">
+        <p id="results-status" class="results-empty" hidden></p>
         <ul id="recipe-list"></ul>
     </div>
 </div>
 
 <div id="recipe-screen" class="screen">
     <header>
-        <button id="back-btn">⬅ Back</button>
-        <h2 id="detail-title" style="flex:1; text-align:right;">Recipe Details</h2>
-        <button id="equip-btn" style="display:none; margin-left:10px;">Equip</button>
+        <button id="back-btn" type="button">⬅ Back</button>
+        <h2 id="detail-title" class="screen-title" aria-live="polite">Recipe Details</h2>
+        <div>
+            <button id="equip-btn" class="equip-btn" type="button">Equip</button>
+            <button id="toggle-nav-recipe-btn" type="button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false">☰</button>
+        </div>
     </header>
     <div class="matrix-container">
-        <div class="grid-2x3" id="detail-grid"></div>
+        <div class="grid-2x3" id="detail-grid" role="group" aria-label="Recipe material slots"></div>
     </div>
     <div id="stats-container" class="stats-container"></div>
 </div>
 
-<!-- New Loadout Screen -->
+<!-- Loadout Screen -->
 <div id="loadout-screen" class="screen">
     <header>
         <h2>Loadout Editor</h2>
-        <button id="toggle-nav-loadout-btn">☰</button>
+        <button id="toggle-nav-loadout-btn" type="button" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false">☰</button>
     </header>
     <div class="loadout-actions">
-        <button id="share-loadout-btn">Copy Code</button>
-        <button id="import-loadout-btn">Import</button>
+        <button id="share-loadout-btn" type="button">Copy Code</button>
+        <button id="import-loadout-btn" type="button">Import</button>
     </div>
     <div id="loadout-slots" class="loadout-slots">
         <!-- Slots will be injected here by JS -->
@@ -56,15 +66,30 @@
     </div>
 </div>
 
+<!-- Loadout Share/Import Modal -->
+<div id="code-modal" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="code-modal-title">
+        <h3 id="code-modal-title">Loadout Code</h3>
+        <p class="modal-hint">The loadout code encodes your equipped items and inheritance.</p>
+        <textarea id="code-textarea" rows="6" spellcheck="false" autocomplete="off"></textarea>
+        <p id="code-modal-status" class="modal-status" role="status"></p>
+        <div class="modal-actions">
+            <button id="code-copy-btn" type="button">Copy</button>
+            <button id="code-import-btn" type="button">Import</button>
+            <button id="code-close-btn" type="button">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- Navigation Sidebar Overlay -->
-<div id="nav-overlay" class="loadout-overlay"></div>
-<div id="nav-sidebar" class="loadout-sidebar">
+<div id="nav-overlay" class="loadout-overlay" aria-hidden="true"></div>
+<div id="nav-sidebar" class="loadout-sidebar" role="dialog" aria-modal="true" aria-label="Navigation menu" aria-hidden="true">
     <div class="loadout-header">
         <h2>Menu</h2>
-        <button id="close-nav-btn">X</button>
+        <button id="close-nav-btn" type="button" aria-label="Close menu">✕</button>
     </div>
-    <div class="nav-links" style="display: flex; flex-direction: column; padding: 15px; gap: 10px;">
-        <button id="nav-recipe-viewer" style="padding: 10px; font-size: 16px;">Recipe Viewer</button>
-        <button id="nav-loadout-editor" style="padding: 10px; font-size: 16px;">Loadout Editor</button>
-    </div>
+    <nav class="nav-links">
+        <button id="nav-recipe-viewer" type="button">Recipe Viewer</button>
+        <button id="nav-loadout-editor" type="button">Loadout Editor</button>
+    </nav>
 </div>

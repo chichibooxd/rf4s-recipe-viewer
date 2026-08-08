@@ -1,0 +1,10 @@
+{
+  "name": "rf4s-recipe-viewer",
+  "version": "14.0.0",
+  "private": true,
+  "description": "Offline-capable recipe lookup for Rune Factory 4 Special.",
+  "type": "module",
+  "scripts": {
+    "test": "node test_custom_item.js && node test_smoke.mjs"
+  }
+}
