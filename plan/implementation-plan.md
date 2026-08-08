@@ -75,11 +75,22 @@ The routing plan depends on state that is currently trapped inside the `initReci
 - **Labels:** keep `name — <subtype> Lv.X` for craftable recipes; for ingredients show the *subtype* (Collectible, Dairy, Nutrient — it exists in the data and is more informative) with no `Lv.0`. Formula: `r.skill === 'Ingredient' ? (r.subtype !== 'Unknown' ? r.subtype : 'Ingredient') : r.subtype + ' Lv.' + r.level`.
 - **Acceptance:** Empty/no-match states render; ingredient rows show category without `Lv.0`.
 
-### 7. INVESTIGATE — stat aggregation model (candidate data bug)
-- **Files:** `js/components/loadout-builder.js` (renderStats, lines 117–131)
-- `calculateStats` sums `baseStats` for the equipped item and `upgradeStats` for **nested CustomItems only**. Plain string materials in slots (the base crafting materials) contribute nothing. In RF4, materials determine the crafted item's stats — totals may be systematically undercounted.
-- **Action:** verify against game behavior and the `Upgrade Values` sheet; if materials should contribute, extend `calculateStats` so string slots add their material's `upgradeStats` (guard for missing entries). Update detail-screen stats display consistently.
-- **Acceptance (if confirmed):** a crafted weapon with a stat-bearing material shows material-contributed stats in detail and in loadout totals.
+### 7. DONE — stat model corrected to match in-game mechanics
+- **Verified against** the RF4 datamine and Kirbye2006's mechanic compilation (GameFAQs board
+  thread 67717309; Fandom used only as secondary cross-check).
+- **Inherited-only contributions:** only player-inherited slots (max 3 extra items in-game)
+  contribute their `upgradeStats`; the recipe's required materials add no stats.
+  Implemented via per-slot `inherited` flags on `CustomItem` (derived on import by
+  comparing against recipe defaults).
+- **TDU tier bonus:** +10…+2000 ATK (weapons) / +3…+800 DEF (other equipment), computed from
+  summed material `Diff` (present in the dump), shown with the skill ≥ 50 condition.
+- **Cooking/chemistry stats:** dish base effects (`Item Use Values`) + hidden ingredient
+  cooking effects (`Upgrade Values` cook columns); non-edible ingredients flagged
+  (in-game base effects go negative/unbalanced).
+- **Inheritance restricted to equipment** (food slots are inert).
+- **Known data limitations:** Total Level Used (TLU) bonuses and dish level
+  (= average ingredient level) are not computable — per-item levels (1–10) are absent
+  from this dataset.
 
 ## P3 — Mobile & accessibility
 

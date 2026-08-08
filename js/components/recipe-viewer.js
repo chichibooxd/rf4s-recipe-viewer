@@ -1,5 +1,24 @@
 import { LoadoutBuilder } from './loadout-builder.js';
-import { CustomItem, slotUpgradeStats, sumStats } from '../models/custom-item.js';
+import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus } from '../models/custom-item.js';
+
+// Base effects of usable items (dishes, medicine) from the Item Use Values sheet
+const USE_COLS = [
+    'HP', 'RP', 'HP %', 'RP %', 'HP Max', 'RP Max', 'STR', 'INT', 'VIT',
+    'HP Max%', 'RP Max%', 'STR %', 'INT %', 'VIT %', 'Crit%',
+    'Knock Res%', 'Crit Res%', 'Psn Res%', 'Seal Res%', 'Par Res%', 'Slp Res%', 'Ftg Res%', 'Sick Res%', 'Fnt Res%',
+    'Psn Atk%', 'Seal Atk%', 'Par Atk%', 'Slp Atk%', 'Ftg Atk%', 'Sick Atk%', 'Fnt Atk%',
+    'Fire Res%', 'Water Res%', 'Earth Res%', 'Wind Res%', 'Light Res%', 'Dark Res%', 'Love Res%',
+    'Perm HP', 'Perm STR', 'Perm INT', 'Perm VIT'
+];
+
+// Hidden cooking effects of ingredients from the Upgrade Values sheet
+const COOK_COLS = [
+    'HP cook', 'RP cook', 'HP% cook', 'RP% cook', 'HP max cook', 'RP max cook',
+    'STR cook', 'INT cook', 'VIT cook', 'HP max% cook', 'RP max% cook', 'STR% cook', 'INT% cook', 'VIT% cook',
+    'Crit% cook', 'Knock Res% cook', 'Crit Res% cook',
+    'Poison Res% cook', 'Seal Res% cook', 'Para Res% cook', 'Sleep Res% cook',
+    'Fatigue Res% cook', 'Sick Res% cook', 'Faint Res% cook', 'Poison Atk% cook'
+];
 
 export async function initRecipeViewer() {
     let appData = { materials: [], recipes: [] };
@@ -230,6 +249,9 @@ export async function initRecipeViewer() {
         const materialsSet = new Set();
         const equipmentStats = {};
         const upgradeStats = {};
+        const useStats = {};
+        const cookStats = {};
+        const difficulty = {};
         
         // Parse Equipment List to get stats
         const eqSheetId = strToId['Equipment List'];
@@ -267,19 +289,24 @@ export async function initRecipeViewer() {
             }
         }
 
-        // Parse Upgrade Values to get inherited stats
+        // Parse Upgrade Values: per-item upgrade effects (combat stats),
+        // hidden cooking effects, and difficulty (used for TDU bonuses)
         const upSheetId = strToId['Upgrade Values'];
         if (upSheetId !== undefined && sheets[upSheetId]) {
             const upRows = sheets[upSheetId];
-            const upHeaders = upRows[0].map(id => strings[id]);
-            const itemIdx = upHeaders.indexOf('Item');
-            const statIndices = statCols.map(col => ({ name: col, idx: upHeaders.indexOf(col) })).filter(c => c.idx !== -1);
+            const upHeaders = rows => rows[0].map(id => strings[id]);
+            const headers = upHeaders(upRows);
+            const itemIdx = headers.indexOf('Item');
+            const statIndices = statCols.map(col => ({ name: col, idx: headers.indexOf(col) })).filter(c => c.idx !== -1);
+            const cookIndices = COOK_COLS.map(col => ({ name: col, idx: headers.indexOf(col) })).filter(c => c.idx !== -1);
+            const diffIdx = headers.indexOf('Diff');
             
             for (let i = 1; i < upRows.length; i++) {
                 const row = upRows[i];
                 if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
                     const itemName = strings[row[itemIdx]];
                     const stats = {};
+                    const cook = {};
                     statIndices.forEach(col => {
                         if (col.idx < row.length) {
                             const val = row[col.idx];
@@ -290,6 +317,48 @@ export async function initRecipeViewer() {
                     });
                     if (Object.keys(stats).length > 0) {
                         upgradeStats[itemName] = stats;
+                    }
+                    cookIndices.forEach(col => {
+                        if (col.idx < row.length) {
+                            const val = row[col.idx];
+                            if (val !== 0 && val !== undefined && val !== null) {
+                                cook[col.name] = val;
+                            }
+                        }
+                    });
+                    if (Object.keys(cook).length > 0) {
+                        cookStats[itemName] = cook;
+                    }
+                    if (diffIdx !== -1 && diffIdx < row.length && typeof row[diffIdx] === 'number') {
+                        difficulty[itemName] = row[diffIdx];
+                    }
+                }
+            }
+        }
+
+        // Parse Item Use Values: base effects of usable items (dishes, medicine)
+        const ivsSheetId = strToId['Item Use Values'];
+        if (ivsSheetId !== undefined && sheets[ivsSheetId]) {
+            const ivsRows = sheets[ivsSheetId];
+            const ivsHeaders = ivsRows[0].map(id => strings[id]);
+            const itemIdx = ivsHeaders.indexOf('Item');
+            const useIndices = USE_COLS.map(col => ({ name: col, idx: ivsHeaders.indexOf(col) })).filter(c => c.idx !== -1);
+            
+            for (let i = 1; i < ivsRows.length; i++) {
+                const row = ivsRows[i];
+                if (itemIdx !== -1 && itemIdx < row.length && row[itemIdx] !== 0 && row[itemIdx] !== undefined) {
+                    const itemName = strings[row[itemIdx]];
+                    const stats = {};
+                    useIndices.forEach(col => {
+                        if (col.idx < row.length) {
+                            const val = row[col.idx];
+                            if (val !== 0 && val !== undefined && val !== null) {
+                                stats[col.name] = val;
+                            }
+                        }
+                    });
+                    if (Object.keys(stats).length > 0) {
+                        useStats[itemName] = stats;
                     }
                 }
             }
@@ -367,7 +436,10 @@ export async function initRecipeViewer() {
                     level: level,
                     materials: materials,
                     baseStats: equipmentStats[nameStr] || null,
-                    upgradeStats: upgradeStats[nameStr] || null
+                    upgradeStats: upgradeStats[nameStr] || null,
+                    useStats: useStats[nameStr] || null,
+                    cookStats: cookStats[nameStr] || null,
+                    difficulty: difficulty[nameStr] || 0
                 });
             }
         });
@@ -402,7 +474,10 @@ export async function initRecipeViewer() {
                             level: 0,
                             materials: [],
                             baseStats: equipmentStats[itemName] || null,
-                            upgradeStats: upgradeStats[itemName] || null
+                            upgradeStats: upgradeStats[itemName] || null,
+                            useStats: useStats[itemName] || null,
+                            cookStats: cookStats[itemName] || null,
+                            difficulty: difficulty[itemName] || 0
                         });
                         recipeNames.add(itemName);
                     }
@@ -422,7 +497,10 @@ export async function initRecipeViewer() {
                     level: 0,
                     materials: [],
                     baseStats: equipmentStats[matName] || null,
-                    upgradeStats: upgradeStats[matName] || null
+                    upgradeStats: upgradeStats[matName] || null,
+                    useStats: useStats[matName] || null,
+                    cookStats: cookStats[matName] || null,
+                    difficulty: difficulty[matName] || 0
                 });
                 recipeNames.add(matName);
             }
@@ -440,7 +518,10 @@ export async function initRecipeViewer() {
                     level: 0,
                     materials: [],
                     baseStats: equipmentStats[eqName] || null,
-                    upgradeStats: upgradeStats[eqName] || null
+                    upgradeStats: upgradeStats[eqName] || null,
+                    useStats: useStats[eqName] || null,
+                    cookStats: cookStats[eqName] || null,
+                    difficulty: difficulty[eqName] || 0
                 });
                 recipeNames.add(eqName);
             }
@@ -624,10 +705,49 @@ export async function initRecipeViewer() {
 
     let currentEquipHandler = null;
 
+    // Render a stat grid section into the stats container
+    function renderStatSection(heading, entries, extraClass = '') {
+        if (!entries || Object.keys(entries).length === 0) return;
+        const statsHeading = document.createElement('h3');
+        statsHeading.textContent = heading;
+        statsContainer.appendChild(statsHeading);
+        
+        const statsGrid = document.createElement('div');
+        statsGrid.className = 'stats-grid';
+        
+        const fragment = document.createDocumentFragment();
+        for (const [statName, statValue] of Object.entries(entries)) {
+            const statBox = document.createElement('div');
+            statBox.className = 'stat-box' + (extraClass ? ' ' + extraClass : '');
+            
+            const strongEl = document.createElement('strong');
+            strongEl.textContent = `${statName}:`;
+            
+            statBox.appendChild(strongEl);
+            statBox.appendChild(document.createTextNode(` ${statValue}`));
+            fragment.appendChild(statBox);
+        }
+        statsGrid.appendChild(fragment);
+        statsContainer.appendChild(statsGrid);
+    }
+
+    // Render a full-width note inside a stats grid
+    function appendStatNote(grid, text) {
+        const note = document.createElement('div');
+        note.className = 'stat-note';
+        note.textContent = text;
+        grid.appendChild(note);
+    }
+
     function showRecipeDetail(item) {
         // item is now always a CustomItem when viewing details
         const recipe = item.baseRecipe;
         detailTitle.textContent = recipe.name;
+
+        // Only equipment supports inheritance in-game (weapons/armor/accessories);
+        // food and medicine cannot have items added to them.
+        const isEquipment = !!loadoutBuilder && !!loadoutBuilder.getSlotForSubtype(recipe.subtype);
+        const isWeapon = isEquipment && loadoutBuilder.weaponSubtypes.includes(recipe.subtype);
         
         const slots = detailGrid.children;
         for (let i = 0; i < 6; i++) {
@@ -653,13 +773,15 @@ export async function initRecipeViewer() {
                         slots[i].onclick = () => openDetail(new CustomItem(matRecipe));
                     }
                 }
-            } else {
+            } else if (isEquipment) {
                 slots[i].textContent = 'Empty (+ Add Item)';
                 slots[i].classList.add('empty-fillable');
                 slots[i].onclick = () => {
                     setPickMode({ customItem: item, slotIndex: i });
                     navigateTo('#/search', { replace: true });
                 };
+            } else {
+                slots[i].textContent = 'Empty';
             }
         }
         
@@ -687,57 +809,48 @@ export async function initRecipeViewer() {
 
         statsContainer.appendChild(baseStatsGrid);
 
-        // Stats contributed by the slot materials (base materials and inheritance)
-        const materialStats = sumStats(...item.slots.map(slot => slotUpgradeStats(slot, recipeByName)));
-        const totalStats = sumStats(recipe.baseStats, materialStats);
-
-        if (recipe.baseStats && Object.keys(recipe.baseStats).length > 0) {
-            const statsHeading = document.createElement('h3');
-            statsHeading.textContent = 'Base Combat Stats';
-            statsContainer.appendChild(statsHeading);
-            
-            const statsGrid = document.createElement('div');
-            statsGrid.className = 'stats-grid';
-            
-            const fragment = document.createDocumentFragment();
-            for (const [statName, statValue] of Object.entries(recipe.baseStats)) {
-                const statBox = document.createElement('div');
-                statBox.className = 'stat-box';
-                
-                const strongEl = document.createElement('strong');
-                strongEl.textContent = `${statName}:`;
-                
-                statBox.appendChild(strongEl);
-                statBox.appendChild(document.createTextNode(` ${statValue}`));
-                fragment.appendChild(statBox);
-            }
-            statsGrid.appendChild(fragment);
-            statsContainer.appendChild(statsGrid);
+        if (isEquipment) {
+            renderEquipmentStats(item, recipe, isWeapon);
+        } else {
+            renderFoodStats(recipe);
         }
 
-        if (Object.keys(materialStats).length > 0) {
-            const statsHeading = document.createElement('h3');
-            statsHeading.textContent = 'Material Stats';
-            statsContainer.appendChild(statsHeading);
-            
-            const statsGrid = document.createElement('div');
-            statsGrid.className = 'stats-grid';
-            
-            const fragment = document.createDocumentFragment();
-            for (const [statName, statValue] of Object.entries(materialStats)) {
-                const statBox = document.createElement('div');
-                statBox.className = 'stat-box';
-                
-                const strongEl = document.createElement('strong');
-                strongEl.textContent = `${statName}:`;
-                
-                statBox.appendChild(strongEl);
-                statBox.appendChild(document.createTextNode(` ${statValue}`));
-                fragment.appendChild(statBox);
+        if (loadoutBuilder && isEquipment) {
+            equipBtn.style.display = 'inline-block';
+            if (currentEquipHandler) {
+                equipBtn.removeEventListener('click', currentEquipHandler);
             }
-            statsGrid.appendChild(fragment);
-            statsContainer.appendChild(statsGrid);
+            currentEquipHandler = () => loadoutBuilder.equipItem(item);
+            equipBtn.addEventListener('click', currentEquipHandler);
+        } else {
+            equipBtn.style.display = 'none';
+        }
+    }
 
+    // Equipment: base + inherited-only contributions (max 3 extra items in-game)
+    // + Total Difficulty Used (TDU) tier bonus.
+    function renderEquipmentStats(item, recipe, isWeapon) {
+        renderStatSection('Base Combat Stats', recipe.baseStats);
+
+        const inherited = inheritedStats(item, recipeByName);
+        if (inherited.count > 0) {
+            renderStatSection('Inheritance Effects', inherited.stats);
+            if (inherited.count >= 3) {
+                const noteGrid = document.createElement('div');
+                noteGrid.className = 'stats-grid';
+                appendStatNote(noteGrid, 'In-game only 3 extra items impart their effects — further inherited items are not counted.');
+                statsContainer.appendChild(noteGrid);
+            }
+        }
+
+        // TDU tier bonus (applies at skill >= 50)
+        const tdu = materialDifficulty(item, recipeByName);
+        const bonus = tduBonus(tdu, isWeapon);
+        const tduEntry = bonus > 0 ? { [isWeapon ? 'ATK' : 'DEF']: bonus } : null;
+
+        const totalStats = sumStats(recipe.baseStats, inherited.stats, tduEntry);
+        if (Object.keys(totalStats).length > 0 &&
+            (Object.keys(inherited.stats).length > 0 || bonus > 0)) {
             const totalHeading = document.createElement('h3');
             totalHeading.textContent = 'Total Stats';
             statsContainer.appendChild(totalHeading);
@@ -759,42 +872,40 @@ export async function initRecipeViewer() {
                 totalFragment.appendChild(statBox);
             }
             totalGrid.appendChild(totalFragment);
+            if (bonus > 0) {
+                appendStatNote(totalGrid, `Includes Total Difficulty bonus (skill ≥ 50): +${bonus} ${isWeapon ? 'ATK' : 'DEF'} (TDU ${tdu})`);
+            }
             statsContainer.appendChild(totalGrid);
         }
 
-        if (recipe.upgradeStats && Object.keys(recipe.upgradeStats).length > 0) {
-            const statsHeading = document.createElement('h3');
-            statsHeading.textContent = 'Inherited Stats';
-            statsContainer.appendChild(statsHeading);
-            
-            const statsGrid = document.createElement('div');
-            statsGrid.className = 'stats-grid';
-            
-            const fragment = document.createDocumentFragment();
-            for (const [statName, statValue] of Object.entries(recipe.upgradeStats)) {
-                const statBox = document.createElement('div');
-                statBox.className = 'stat-box';
-                
-                const strongEl = document.createElement('strong');
-                strongEl.textContent = `${statName}:`;
-                
-                statBox.appendChild(strongEl);
-                statBox.appendChild(document.createTextNode(` ${statValue}`));
-                fragment.appendChild(statBox);
-            }
-            statsGrid.appendChild(fragment);
-            statsContainer.appendChild(statsGrid);
+        // What this item contributes when used as a material in another item
+        renderStatSection('As Upgrade Material', recipe.upgradeStats);
+    }
+
+    // Food/medicine: base use effects + hidden cooking effects of ingredients.
+    // Dish level in-game is the average ingredient level (level data is not
+    // available in this dataset), so base effects are shown unscaled.
+    function renderFoodStats(recipe) {
+        const nonEdible = recipe.materials.some(material => {
+            const matRecipe = recipeByName.get(material);
+            return !matRecipe || !matRecipe.useStats;
+        });
+
+        if (nonEdible) {
+            const warningGrid = document.createElement('div');
+            warningGrid.className = 'stats-grid';
+            appendStatNote(warningGrid, 'This recipe contains non-edible ingredients — in-game the dish\'s base effects become negative (unbalanced).');
+            statsContainer.appendChild(warningGrid);
         }
 
-        if (loadoutBuilder && loadoutBuilder.getSlotForSubtype(recipe.subtype)) {
-            equipBtn.style.display = 'inline-block';
-            if (currentEquipHandler) {
-                equipBtn.removeEventListener('click', currentEquipHandler);
-            }
-            currentEquipHandler = () => loadoutBuilder.equipItem(item);
-            equipBtn.addEventListener('click', currentEquipHandler);
-        } else {
-            equipBtn.style.display = 'none';
+        renderStatSection('Dish Effects (base)', recipe.useStats);
+
+        const cookTotal = sumStats(...recipe.materials.map(material => {
+            const matRecipe = recipeByName.get(material);
+            return matRecipe ? matRecipe.cookStats : null;
+        }));
+        if (Object.keys(cookTotal).length > 0) {
+            renderStatSection('Ingredient Cooking Effects', cookTotal);
         }
     }
 

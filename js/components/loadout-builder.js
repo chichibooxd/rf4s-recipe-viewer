@@ -1,4 +1,4 @@
-import { CustomItem, slotUpgradeStats, sumStats } from '../models/custom-item.js';
+import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus } from '../models/custom-item.js';
 
 export class LoadoutBuilder {
     constructor(appData, onSlotEmptyClick, onSlotFilledClick, onNavigate) {
@@ -120,17 +120,27 @@ export class LoadoutBuilder {
     renderStats() {
         this.statsGrid.replaceChildren();
 
-        // Equipped item contributes its base stats; every slot material
-        // (plain material or inherited crafted item) contributes its
-        // upgrade stats.
-        const contributionLists = [];
+        // Game-accurate model:
+        // - equipped item contributes its base stats (from the recipe)
+        // - only player-inherited slots (max 3 extra items) contribute
+        //   their upgrade stats; the recipe's required materials add none
+        // - Total Difficulty Used (TDU) tier bonus adds ATK (weapons) or
+        //   DEF (other equipment), applies at skill level >= 50
+        const contributionParts = [];
+        let tduAtk = 0;
+        let tduDef = 0;
         Object.values(this.slots).forEach(item => {
             if (!item) return;
-            const parts = [item.baseRecipe.baseStats];
-            item.slots.forEach(slot => parts.push(slotUpgradeStats(slot, this.recipeByName)));
-            contributionLists.push(parts);
+            const baseRecipe = item.baseRecipe;
+            const isWeapon = this.weaponSubtypes.includes(baseRecipe.subtype);
+            const inherited = inheritedStats(item, this.recipeByName);
+            const bonus = tduBonus(materialDifficulty(item, this.recipeByName), isWeapon);
+            if (isWeapon) tduAtk += bonus;
+            else tduDef += bonus;
+            const tduEntry = bonus > 0 ? { [isWeapon ? 'ATK' : 'DEF']: bonus } : null;
+            contributionParts.push(baseRecipe.baseStats, inherited.stats, tduEntry);
         });
-        const totalStats = sumStats(...contributionLists.flat());
+        const totalStats = sumStats(...contributionParts);
 
         if (Object.keys(totalStats).length === 0) {
             const emptyEl = document.createElement('div');
@@ -152,6 +162,17 @@ export class LoadoutBuilder {
             statBox.appendChild(document.createTextNode(` ${val}`));
             fragment.appendChild(statBox);
         });
+
+        if (tduAtk > 0 || tduDef > 0) {
+            const note = document.createElement('div');
+            note.className = 'stat-note';
+            const parts = [];
+            if (tduAtk > 0) parts.push(`+${tduAtk} ATK`);
+            if (tduDef > 0) parts.push(`+${tduDef} DEF`);
+            note.textContent = `Includes Total Difficulty bonus (skill ≥ 50): ${parts.join(', ')}`;
+            fragment.appendChild(note);
+        }
+
         this.statsGrid.appendChild(fragment);
     }
 

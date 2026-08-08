@@ -30,6 +30,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and th
 - Duplicate `.detail-slot` CSS rules removed (style.css).
 - Loadout import no longer relies on `prompt()` (unsupported on iOS Safari); export/import share an in-app modal with inline error/status feedback.
 
+### Corrected to match in-game mechanics (verified against the RF4 datamine and Kirbye2006's mechanic compilation)
+- **Stat contributions:** only player-inherited slots (max 3 extra items, as in-game) contribute their upgrade stats to equipment totals. The recipe's required materials no longer add stats — Steel Edge forged from Iron/Iron/Bronze now shows no DEF from the ore. The previous model overcounted every recipe material's upgrade values.
+- **Total Difficulty Used (TDU) bonus:** items now gain the TDU tier bonus (+10…+2000 ATK for weapons, +3…+800 DEF for other equipment), computed from the sum of material difficulty (`Diff` column), shown with the "applies at skill ≥ 50" condition. Total Level Used (TLU) bonuses remain impossible: item levels are not in this dataset (documented limitation).
+- **Cooking/Chemistry stats:** dishes and medicine now show their base effects (from the `Item Use Values` sheet) and the hidden ingredient cooking effects (`HP cook`, `STR cook`, … from `Upgrade Values`) that always apply when used as ingredients. Recipes containing non-edible ingredients are flagged (in-game their base effects turn negative/unbalanced). Dish level = average ingredient level cannot be computed (level data unavailable); base effects are shown unscaled.
+- **Inheritance restricted to equipment:** food and medicine no longer offer fillable material slots (in-game you cannot add items to cooked food).
+
 ### Changed (docs)
 - `implementation.md` updated to match the actual repo layout (`data/data.json`, loadout-builder module, missing scripts dir) and the new routing model.
 - Test harness added: `package.json` (Node ESM), `test_custom_item.js` runnable via `npm test`, plus `test_smoke.mjs` — a DOM-stub end-to-end pass over routing, filtering, pick mode, loadout totals, and the share/import modal.

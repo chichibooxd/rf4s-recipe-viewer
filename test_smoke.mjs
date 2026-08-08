@@ -82,29 +82,33 @@ const document = {
 };
 
 const hashListeners = [];
+const historyEntries = [''];
 const location = {
     _hash: '',
     get hash() { return this._hash; },
     set hash(v) {
-        if (this._hash !== v) { this._hash = v; hashListeners.forEach(fn => fn()); }
+        if (this._hash === v) return;
+        this._hash = v;
+        // like a browser: assigning location.hash adds a history entry
+        historyEntries.push(v);
+        hashListeners.forEach(fn => fn());
     }
 };
 const history = {
-    _stack: [''],
     replaceState(_state, _unused, url) {
         if (!url) return;
-        this._stack[this._stack.length - 1] = url;
+        historyEntries[historyEntries.length - 1] = url;
         location._hash = url;
     },
     pushState(_state, _unused, url) {
         if (!url) return;
-        this._stack.push(url);
+        historyEntries.push(url);
         location._hash = url;
     },
     back() {
-        if (this._stack.length > 1) {
-            this._stack.pop();
-            location._hash = this._stack[this._stack.length - 1];
+        if (historyEntries.length > 1) {
+            historyEntries.pop();
+            location._hash = historyEntries[historyEntries.length - 1];
             hashListeners.forEach(fn => fn());
         }
     }
@@ -274,7 +278,7 @@ check('api exposes isPickMode', typeof api.isPickMode === 'function');
     }
 }
 
-// --- 6b. Material upgrade stats flow into totals (P2.7) ---
+// --- 6b. Recipe materials do NOT contribute; only inherited slots do (game-accurate) ---
 {
     skill.value = 'Forging';
     fire(skill, 'change', { target: skill });
@@ -283,18 +287,74 @@ check('api exposes isPickMode', typeof api.isPickMode === 'function');
     const target = byId['recipe-list'].children.find(li => li.textContent.includes('Steel Edge'));
     if (target) {
         fire(byId['recipe-list'], 'click', { target });
+        check('Steel Edge detail open', byId['detail-title'].textContent === 'Steel Edge');
+        // Steel Edge recipe: Iron + Iron + Bronze — none of these impart stats
+        const detailText = byId['stats-container'].children.map(c => c.textContent).join(' ');
+        check('no Inheritance Effects section (recipe materials contribute nothing)', !detailText.includes('Inheritance Effects'));
         fire(byId['equip-btn'], 'click');
         const boxes = byId['loadout-stats-grid'].children.map(c => c.textContent).join(' ');
-        // Steel Edge: base ATK/Diz + 2x Iron (DEF+1 each = DEF 2) + Claws
-        const defMatch = boxes.match(/DEF:\s*(\d+)/);
-        check('material upgrade stats (2x Iron DEF) in loadout totals', defMatch && parseInt(defMatch[1], 10) >= 2);
-        console.log('    Steel Edge totals:', boxes.slice(0, 160));
+        // base ATK 58/Diz 3, no DEF at all; recipe Iron/Bronze DEF not counted;
+        // TDU 19 (Iron2+Iron2+Bronze15) >= 10 grants the +10 ATK tier bonus
+        check('recipe materials do not add stats (no DEF in totals)', !/DEF:/.test(boxes));
+        check('TDU bonus applied (+10 ATK at skill >= 50)', /ATK:\s*68/.test(boxes) && boxes.includes('Total Difficulty bonus'));
+        console.log('    Steel Edge totals (no inheritance):', boxes.replace(/\s+/g, ' ').slice(0, 140));
     } else {
         check('Steel Edge found', false);
     }
-    // back to Steel Sword for the modal tests
-    skill.value = 'Forging';
+}
+
+// --- 6c. Inheritance adds upgrade stats (Iron DEF +1), capped at 3 ---
+{
+    // open Steel Edge detail from the search list (still on Dual Blade filter)
+    const target = byId['recipe-list'].children.find(li => li.textContent.includes('Steel Edge'));
+    if (target) {
+        fire(byId['recipe-list'], 'click', { target });
+        const emptySlot = byId['detail-grid'].children.find(c => c.classList.contains('empty-fillable'));
+        check('empty slot is fillable on equipment', !!emptySlot);
+        emptySlot.onclick();
+        check('pick mode active for inheritance', !byId['pick-banner'].hidden);
+        // find Iron: ingredient items pick up their Category value from the
+        // data dump, which for Iron resolves to the 'Short Sword' subtype
+        skill.value = 'All';
+        fire(skill, 'change', { target: skill });
+        subtype.value = 'Short Sword';
+        fire(subtype, 'change', { target: subtype });
+        const iron = byId['recipe-list'].children.find(li => li.textContent.startsWith('Iron —'));
+        check('Iron found in results', !!iron);
+        fire(byId['recipe-list'], 'click', { target: iron });
+        check('returned to Steel Edge detail after pick', byId['detail-title'].textContent === 'Steel Edge');
+        const detailText = byId['stats-container'].children.map(c => c.textContent).join(' ');
+        check('Inheritance Effects shown (Iron DEF +1)', detailText.includes('Inheritance Effects') && detailText.includes('DEF: 1'));
+        fire(byId['equip-btn'], 'click');
+        const boxes = byId['loadout-stats-grid'].children.map(c => c.textContent).join(' ');
+        const defMatch = boxes.match(/DEF:\s*(\d+)/);
+        // Steel Edge has no base DEF; only the inherited Iron contributes DEF 1
+        check('loadout total DEF 1 = inherited Iron only', defMatch && parseInt(defMatch[1], 10) === 1);
+        console.log('    Steel Edge totals (with Iron inherited):', boxes.replace(/\s+/g, ' ').slice(0, 140));
+    } else {
+        check('Steel Edge found for inheritance', false);
+    }
+}
+
+// --- 6d. Cooking stats: dish effects + ingredient cooking effects ---
+{
+    skill.value = 'Cooking';
     fire(skill, 'change', { target: skill });
+    subtype.value = 'All';
+    fire(subtype, 'change', { target: subtype });
+    const salad = byId['recipe-list'].children.find(li => li.textContent.includes('Salad'));
+    if (salad) {
+        fire(byId['recipe-list'], 'click', { target: salad });
+        check('Salad detail open', byId['detail-title'].textContent === 'Salad');
+        const text = byId['stats-container'].children.map(c => c.textContent).join(' ');
+        check('Salad shows Dish Effects (base)', text.includes('Dish Effects (base)') && text.includes('HP: 5000'));
+        check('Salad shows Ingredient Cooking Effects', text.includes('Ingredient Cooking Effects') && text.includes('HP cook:'));
+        const emptySlot = byId['detail-grid'].children.find(c => c.classList.contains('empty-fillable'));
+        check('food slots are NOT fillable (no inheritance on food)', !emptySlot);
+        console.log('    Salad detail:', text.replace(/\s+/g, ' ').slice(0, 160));
+    } else {
+        check('Salad found', false);
+    }
 }
 
 // --- 7. Modal export ---

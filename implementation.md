@@ -41,8 +41,15 @@ The `data.json` format is produced by an external conversion script (see `specs.
 ## Frontend Logic (`js/components/recipe-viewer.js` & `loadout-builder.js`)
 1. **Fetching & Decoding:** Fetches `data/data.json`, resolves string IDs, and reconstructs
    readable recipe objects with properties: `id`, `skill`, `type`, `subtype`, `name`, `level`,
-   `materials`, `baseStats`, and `upgradeStats`. Non-craftable items are added from the
-   `Item Values` sheet (plus any leftover materials/equipment) as `Ingredient`/`Equipment` items.
+   `materials`, `baseStats`, `upgradeStats`, `useStats`, `cookStats`, and `difficulty`.
+   - `baseStats`/`upgradeStats` come from the `Equipment List` and `Upgrade Values` sheets
+     (combat stats; `upgradeStats` = the item's upgrade effect when used as a material).
+   - `useStats` comes from `Item Use Values` (base effects of dishes/medicine/usable items).
+   - `cookStats` comes from the `Upgrade Values` cook columns (hidden ingredient cooking
+     effects that always apply when used in a recipe).
+   - `difficulty` is the `Diff` column (feeds the Total Difficulty Used bonus).
+   Non-craftable items are added from the `Item Values` sheet (plus any leftover
+   materials/equipment) as `Ingredient`/`Equipment` items.
 2. **Skill Routing:** Differentiates 'Cooking' and 'Chemistry' skills (shared raw sheet) by
    inspecting `type`/`subtype`.
 3. **Dynamic Filtering:** Skill and subtype filters update the material grid options; results
@@ -52,11 +59,25 @@ The `data.json` format is produced by an external conversion script (see `specs.
    stack is used for navigation. Pick-mode navigation uses history replacement so it adds no
    back entries. The detail view carries the live `CustomItem` instance so inheritance edits
    persist and mutate the original object.
-5. **Inheritance pick mode:** clicking an empty material slot shows a banner on the search
-   screen; picking a recipe fills the slot; Cancel (or navigating away) clears pick mode
-   without touching filters.
-6. **Loadout Editor:** 6 slots (Weapon, Shield, Headgear, Armor, Shoes, Accessory). Weapon
-   subtypes map to the Weapon slot. Totals = equipped item `baseStats` + `upgradeStats` of
-   every slot material (plain materials and inherited crafted items both contribute their
-   upgrade values). Export/import uses a Base64(URI-encoded JSON) code via an in-app modal.
-7. **Service Worker:** network-first with cache fallback; cache version `rf4-recipes-v14`.
+5. **Inheritance pick mode:** clicking an empty material slot on equipment shows a banner on the
+   search screen; picking a recipe fills the slot; Cancel (or navigating away) clears pick mode
+   without touching filters. Only equipment supports inheritance (food/medicine have inert slots,
+   matching the game).
+6. **Stat model (game-accurate):**
+   - Equipment totals = recipe `baseStats` + `upgradeStats` of **player-inherited slots only**
+     (capped at 3 extra items, as in-game; the recipe's required materials add no stats) +
+     the **Total Difficulty Used (TDU) tier bonus** (+10…+2000 ATK weapons, +3…+800 DEF other
+     equipment; applies at skill ≥ 50). TDU = sum of `difficulty` over all materials used.
+   - Inherited crafted items contribute their own `upgradeStats` only (their materials do not
+     carry over). Inherited slots are tracked per-slot on `CustomItem` and derived on import
+     by comparing against the recipe defaults.
+   - Total Level Used (TLU) tier bonuses are **not** computed: per-item levels (1–10) are not
+     present in this dataset.
+   - Dishes/medicine detail shows `useStats` (Dish Effects, unscaled — dish level = average
+     ingredient level is not computable without item levels) plus the summed `cookStats` of the
+     ingredients (Ingredient Cooking Effects). Recipes containing non-edible ingredients
+     (no `useStats` entry) are flagged — in-game their base effects become negative/unbalanced.
+7. **Loadout Editor:** 6 slots (Weapon, Shield, Headgear, Armor, Shoes, Accessory). Weapon
+   subtypes map to the Weapon slot. Export/import uses a Base64(URI-encoded JSON) code via an
+   in-app modal.
+8. **Service Worker:** network-first with cache fallback; cache version `rf4-recipes-v14`.
