@@ -4,6 +4,28 @@ All notable changes to RF4 Recipe Viewer are documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to a cache-bumped version scheme (`rf4-recipes-vN` in `sw.js`).
 
+## [v15] - 2026-08-08
+
+### Added
+- **Character Planner tab** (`#/planner`): skill levels → HP/RP/STR/INT/VIT calculator.
+  - Base stats from the `Level Up` sheet (Lv.1 = 25 HP / 56 RP / 5 STR / 5 INT / 4 VIT).
+  - Per-skill yields from the `Skill Stats` sheet (38 skills, exact float values incl.
+    the documented floor-rounding quirks), with the in-game multipliers: HP doubles every
+    50 skill levels, STR/INT/VIT every 300, RP caps at skill 100.
+  - Derived combat stats: STR → +1 ATK, INT → +1 M.ATK, VIT → +0.5 DEF/+0.5 M.DEF.
+  - Craft RP cost per action (Forge 16 RP + 6.35%, Craft 16 + 6.35%, Mix 12 + 4.76%,
+    Cook 5 + 3.81% of max RP) plus crafts-until-empty at current max RP.
+  - Planner state persisted in localStorage.
+- Formulas verified against clepe's Stats Guide examples (Mining 50 → 75 HP, RP cap, etc.).
+
+### Note
+- Craft success percentage and XP gained per craft remain unimplemented — those formulas
+  are game logic and are not present in the data dump or published guides (see
+  `plan/all-in-one-roadmap.md`).
+- Service worker cache bumped `rf4-recipes-v14` → `rf4-recipes-v15` (new planner module).
+
+---
+
 ## [v14] - 2026-08-08
 
 ### Added

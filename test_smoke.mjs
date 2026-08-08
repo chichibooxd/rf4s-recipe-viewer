@@ -131,6 +131,11 @@ globalThis.document = document;
 globalThis.location = location;
 globalThis.history = history;
 Object.defineProperty(globalThis, 'navigator', { value: navigator, configurable: true, writable: true });
+globalThis.localStorage = {
+    _store: {},
+    getItem(k) { return this._store[k] ?? null; },
+    setItem(k, v) { this._store[k] = String(v); }
+};
 globalThis.window = {
     innerWidth: 400,
     innerHeight: 800,
@@ -148,7 +153,7 @@ globalThis.window.addEventListener = (type, fn) => {
 globalThis.alert = msg => console.log('[alert]', msg);
 
 // Build the screens and register ids used by the UI template
-['search-screen', 'recipe-screen', 'loadout-screen'].forEach(id => {
+['search-screen', 'recipe-screen', 'loadout-screen', 'planner-screen'].forEach(id => {
     const el = makeEl('div');
     el.id = id;
     byId[id] = el;
@@ -161,7 +166,8 @@ const IDS = ['input-grid', 'recipe-list', 'detail-grid', 'detail-title', 'back-b
     'equip-btn', 'skill-filter', 'subtype-filter', 'stats-container', 'results-status',
     'pick-banner', 'pick-banner-text', 'pick-cancel-btn', 'loadout-slots', 'loadout-stats-grid',
     'share-loadout-btn', 'import-loadout-btn', 'code-modal', 'code-textarea', 'code-modal-status',
-    'code-modal-title', 'code-copy-btn', 'code-import-btn', 'code-close-btn'];
+    'code-modal-title', 'code-copy-btn', 'code-import-btn', 'code-close-btn',
+    'planner-skills', 'planner-stats', 'planner-costs', 'planner-level', 'planner-notes'];
 IDS.forEach(id => { if (!byId[id]) byId[id] = makeEl('div'); });
 byId['pick-banner'].hidden = true; // ui.html starts with hidden attribute
 byId['results-status'].hidden = true;
@@ -385,6 +391,65 @@ fire(byId['code-close-btn'], 'click');
 
 // --- 9. Route refresh restore: direct load on detail route ---
 hashListeners.forEach(fn => fn());
+
+// --- 11. Planner: stats editor + RP calc (clepe's guide examples) ---
+{
+    // navigate to the planner route
+    location.hash = '#/planner';
+    hashListeners.forEach(fn => fn());
+    check('planner route active', byId['planner-screen'].classList.contains('active'));
+
+    const findInput = (root, label) => {
+        for (const child of root.children) {
+            if (child.getAttribute && child.getAttribute('aria-label') === label) return child;
+            if (child.children) {
+                const found = findInput(child, label);
+                if (found) return found;
+            }
+        }
+        return null;
+    };
+
+    const statsText = () => byId['planner-stats'].children.map(c => c.textContent).join(' ');
+    const costsText = () => byId['planner-costs'].children.map(c => c.textContent).join(' ');
+
+    // Level 1, no skills → clepe's base stats
+    check('planner: L1 base HP 25', /HP:\s*25/.test(statsText()));
+    check('planner: L1 base RP 56', /RP:\s*56/.test(statsText()));
+    check('planner: L1 base STR 5', /STR:\s*5/.test(statsText()));
+
+    // Mining 50 → 75 HP (clepe's example)
+    byId['planner-level'].value = '1';
+    const mining = findInput(byId['planner-skills'], 'Mining level');
+    check('planner: Mining input exists', !!mining);
+    if (mining) {
+        mining.value = '50';
+        fire(mining, 'change', { target: mining });
+        check('planner: Mining 50 → HP 75', /HP:\s*75/.test(statsText()));
+        check('planner: Mining 50 → RP 106', /RP:\s*106/.test(statsText()));
+    }
+
+    // Craft RP costs at current max RP (56 at L1): Forge 16 + 4% = 20
+    check('planner: Forge RP cost shown', /Forging:\s*\d+ RP/.test(costsText()));
+    const forgeCost = parseInt(costsText().match(/Forging:\s*(\d+)/)?.[1] || '0', 10);
+    const cookCost = parseInt(costsText().match(/Cooking:\s*(\d+)/)?.[1] || '999', 10);
+    check('planner: cook cost cheaper than forge', cookCost < forgeCost);
+
+    // pure functions also verified directly
+    const { parseLevelUp, parseSkillStats, computeCharacterStats, craftRpCost } =
+        await import(APP + 'js/components/planner.js');
+    const raw = JSON.parse(readFileSync(APP + 'data/data.json', 'utf8'));
+    const levels = parseLevelUp(raw);
+    const skills = parseSkillStats(raw);
+    check('planner: 38 skills parsed', skills.length === 38);
+    check('planner: 200 levels parsed', levels.length - 1 === 200);
+    const forge = skills.find(s => s.name === 'Forging');
+    check('planner: Forging yields RP 0.25 STR 0.5', forge.rp === 0.25 && forge.str === 0.5);
+    const zeros = skills.map(() => 0);
+    const base = computeCharacterStats(1, zeros, levels, skills);
+    check('planner: computeCharacterStats base matches data', base.hp === 25 && base.rp === 56 && base.str === 5 && base.int === 5 && base.vit === 4);
+    check('planner: craftRpCost Forge@56 = 20', craftRpCost({ flat: 16, pct: 0.06349206349206349 }, 56) === 20);
+}
 
 // --- 10. Stat glossary + tooltip ---
 {

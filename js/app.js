@@ -21,19 +21,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Bottom tab navigation: the hash is the single source of truth
         const tabRecipes = document.getElementById('tab-recipes');
         const tabLoadout = document.getElementById('tab-loadout');
+        const tabPlanner = document.getElementById('tab-planner');
 
         tabRecipes.addEventListener('click', () => { location.hash = '#/search'; });
         tabLoadout.addEventListener('click', () => { location.hash = '#/loadout'; });
+        tabPlanner.addEventListener('click', () => { location.hash = '#/planner'; });
 
         // Highlight the active tab
         function updateTabs(screen) {
             const recipesActive = screen === 'search' || screen === 'recipe';
             tabRecipes.classList.toggle('active', recipesActive);
             tabLoadout.classList.toggle('active', screen === 'loadout');
+            tabPlanner.classList.toggle('active', screen === 'planner');
             tabRecipes.setAttribute('aria-current', recipesActive ? 'page' : 'false');
             tabLoadout.setAttribute('aria-current', screen === 'loadout' ? 'page' : 'false');
+            tabPlanner.setAttribute('aria-current', screen === 'planner' ? 'page' : 'false');
         }
-        updateTabs(location.hash === '#/loadout' ? 'loadout' : 'search');
+        updateTabs(location.hash.startsWith('#/loadout') ? 'loadout' : location.hash.startsWith('#/planner') ? 'planner' : 'search');
         window.addEventListener('routechange', (e) => updateTabs(e.detail));
     } catch (error) {
         console.error('Error initializing application:', error);

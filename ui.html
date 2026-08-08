@@ -74,8 +74,40 @@
     </div>
 </div>
 
+<!-- Planner Screen -->
+<div id="planner-screen" class="screen">
+    <header>
+        <h2>Character Planner</h2>
+    </header>
+    <div class="planner-body">
+        <div class="planner-section">
+            <h3>Character Level</h3>
+            <label class="planner-level-row">
+                Level
+                <input id="planner-level" type="number" min="1" max="200" value="1" aria-label="Character level">
+            </label>
+        </div>
+        <div class="planner-section">
+            <h3>Skill Levels</h3>
+            <div id="planner-skills" class="planner-skills"></div>
+        </div>
+        <div class="planner-section">
+            <h3>Calculated Stats</h3>
+            <p class="planner-hint">STR → +1 ATK, INT → +1 M.ATK, VIT → +0.5 DEF / +0.5 M.DEF (equipment adds on top).</p>
+            <div id="planner-stats" class="stats-grid"></div>
+        </div>
+        <div class="planner-section">
+            <h3>Craft RP Cost</h3>
+            <p class="planner-hint">RP cost per craft at your current max RP (from the game's action tables).</p>
+            <div id="planner-costs" class="stats-grid"></div>
+        </div>
+        <p id="planner-notes" class="planner-notes"></p>
+    </div>
+</div>
+
 <!-- Bottom tab navigation -->
 <nav id="bottom-nav" aria-label="Main navigation">
     <button id="tab-recipes" type="button" aria-current="page">Recipes</button>
     <button id="tab-loadout" type="button">Loadout</button>
+    <button id="tab-planner" type="button">Planner</button>
 </nav>

@@ -20,7 +20,8 @@
 │   ├── app.js           # Entrypoint: UI injection, bottom tab navigation
 │   ├── components/
 │   │   ├── recipe-viewer.js   # Core app logic: routing, decoding, filtering, detail view
-│   │   └── loadout-builder.js # Loadout Editor: slots, totals, share/import modal
+│   │   ├── loadout-builder.js # Loadout Editor: slots, totals, share/import modal
+│   │   └── planner.js         # Character Planner: skill levels → HP/RP/STR/INT/VIT, craft RP costs
 │   ├── models/
 │   │   └── custom-item.js     # Model for custom crafting inheritance trees + stat helpers
 │   └── utils/
@@ -82,4 +83,10 @@ The `data.json` format is produced by an external conversion script (see `specs.
 7. **Loadout Editor:** 6 slots (Weapon, Shield, Headgear, Armor, Shoes, Accessory). Weapon
    subtypes map to the Weapon slot. Export/import uses a Base64(URI-encoded JSON) code via an
    in-app modal.
-8. **Service Worker:** network-first with cache fallback; cache version `rf4-recipes-v14`.
+8. **Character Planner** (`js/components/planner.js`): parses the `Level Up` sheet (base
+   stats + per-level gains), the `Skill Stats` sheet (38 per-skill stat yields, named by
+   row index — the `craftSubClass` column is unreliable), and the `Skill Action Exp` sheet
+   (craft RP costs). Stat math follows clepe's Stats Guide: HP yields double every 50 skill
+   levels, STR/INT/VIT every 300, RP caps at skill 100; per-skill contributions floor
+   individually. Craft cost = flat RP + % of max RP.
+9. **Service Worker:** network-first with cache fallback; cache version `rf4-recipes-v15`.

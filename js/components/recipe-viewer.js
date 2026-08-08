@@ -1,6 +1,7 @@
 import { LoadoutBuilder } from './loadout-builder.js';
 import { CustomItem, sumStats, inheritedStats, materialDifficulty, tduBonus } from '../models/custom-item.js';
 import { attachStatInfo } from '../utils/stat-info.js';
+import { initPlanner } from './planner.js';
 
 // Base effects of usable items (dishes, medicine) from the Item Use Values sheet
 const USE_COLS = [
@@ -58,6 +59,8 @@ export async function initRecipeViewer() {
         appData = processData(rawData);
         recipeById = new Map(appData.recipes.map(r => [r.id, r]));
         recipeByName = new Map(appData.recipes.map(r => [r.name, r]));
+
+        initPlanner(rawData);
 
         loadoutBuilder = new LoadoutBuilder(appData,
             (slotName) => {
@@ -153,6 +156,7 @@ export async function initRecipeViewer() {
             return { screen: 'recipe', id: decodeURIComponent(h.slice('#/recipe/'.length)) };
         }
         if (h === '#/loadout') return { screen: 'loadout' };
+        if (h === '#/planner') return { screen: 'planner' };
         return { screen: 'search' };
     }
 
@@ -194,6 +198,8 @@ export async function initRecipeViewer() {
         } else if (route.screen === 'loadout') {
             document.getElementById('loadout-screen').classList.add('active');
             loadoutBuilder.refresh();
+        } else if (route.screen === 'planner') {
+            document.getElementById('planner-screen').classList.add('active');
         } else {
             document.getElementById('search-screen').classList.add('active');
         }
